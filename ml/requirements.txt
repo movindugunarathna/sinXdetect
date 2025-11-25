@@ -1,0 +1,8 @@
+pandas
+scikit-learn
+joblib
+# Optional (transformer fine-tuning):
+transformers
+datasets
+torch
+sentencepiece
