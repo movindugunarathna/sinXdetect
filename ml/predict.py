@@ -1,37 +1,70 @@
 # -*- coding: utf-8 -*-
 """
 Model Usage / Inference Script
-Load the trained TF-IDF + LogisticRegression model and make predictions on new Sinhala text.
+Load the local multilingual BERT (MobileBERT) sequence classifier and make
+predictions on Sinhala text. The model artifacts are expected under
+models/bert_multilingual_model (config.json, tokenizer.json, tf_model.h5, etc.).
+
+Dependencies:
+- transformers (TF backend)
+- tensorflow
 """
 
-import joblib
 from pathlib import Path
 import re
+from typing import Dict, Tuple, List, Union
+
+import numpy as np
+
+try:
+    import tensorflow as tf
+except ImportError as e:
+    raise ImportError(
+        "TensorFlow is required for this predictor. Please install it, e.g.\n"
+        "  pip install tensorflow\n"
+        "If you prefer PyTorch, provide a PyTorch (.bin) model instead of tf_model.h5."
+    ) from e
+
+try:
+    from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+except ImportError as e:
+    raise ImportError(
+        "transformers is required. Please install it, e.g.\n"
+        "  pip install transformers sentencepiece\n"
+    ) from e
 
 
-def load_model(model_path='models/tfidf_logreg_sinhala.joblib'):
+# Default id-to-label mapping for binary classification.
+# Adjust if your trained model used a different ordering.
+ID2LABEL: Dict[int, str] = {
+    0: 'HUMAN',
+    1: 'AI',
+}
+
+
+def load_model(model_dir: Union[str, Path] = 'models/bert_multilingual_model') -> Tuple[AutoTokenizer, TFAutoModelForSequenceClassification]:
     """
-    Load the trained model and vectorizer from a joblib file.
-    
+    Load tokenizer and TensorFlow sequence classification model from a local directory.
+
     Args:
-        model_path (str): Path to the saved model bundle
-        
+        model_dir: Path to directory containing config.json, tokenizer.json, tf_model.h5, etc.
+
     Returns:
-        tuple: (vectorizer, model)
+        (tokenizer, model)
     """
-    model_path = Path(model_path)
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model not found at {model_path}")
-    
-    bundle = joblib.load(model_path)
-    vectorizer = bundle['vectorizer']
-    model = bundle['model']
-    
-    print(f"Model loaded from {model_path}")
-    return vectorizer, model
+    model_dir = Path(model_dir)
+    if not model_dir.exists():
+        raise FileNotFoundError(f"Model directory not found: {model_dir}")
+
+    tokenizer = AutoTokenizer.from_pretrained(str(model_dir), use_fast=True)
+    model = TFAutoModelForSequenceClassification.from_pretrained(str(model_dir))
+
+    print(f"Loaded tokenizer and model from {model_dir}")
+    print(f"Model config: {model.config}")
+    return tokenizer, model
 
 
-def clean_text(s):
+def clean_text(s: str) -> str:
     """
     Clean text: remove URLs and extra whitespace.
     
@@ -50,74 +83,105 @@ def clean_text(s):
     return s
 
 
-def predict(text, vectorizer, model, return_probabilities=False):
+def predict(
+    text: str,
+    tokenizer: AutoTokenizer,
+    model: TFAutoModelForSequenceClassification,
+    return_probabilities: bool = False,
+    max_length: int = 256,
+) -> Union[str, Dict[str, Union[str, float, Dict[str, float]]]]:
     """
-    Predict whether text is AI-generated or Human-written.
-    
+    Predict whether text is AI-generated or Human-written using the BERT classifier.
+
     Args:
-        text (str): Input Sinhala text
-        vectorizer: Fitted TF-IDF vectorizer
-        model: Trained LogisticRegression model
-        return_probabilities (bool): If True, return class probabilities
-        
+        text: Input Sinhala text.
+        tokenizer: Loaded tokenizer.
+        model: Loaded TF sequence classification model.
+        return_probabilities: If True, return class probabilities.
+        max_length: Tokenization max sequence length.
+
     Returns:
-        str or dict: Predicted label ('AI' or 'HUMAN') or dict with label and probabilities
+        Predicted label ('AI' or 'HUMAN') or a dict with label, probabilities, confidence.
     """
-    # Clean the text
     cleaned_text = clean_text(text)
-    
-    # Vectorize
-    text_tfidf = vectorizer.transform([cleaned_text])
-    
-    # Predict
-    prediction = model.predict(text_tfidf)[0]
-    
+
+    inputs = tokenizer(
+        cleaned_text,
+        return_tensors='tf',
+        truncation=True,
+        padding='max_length',
+        max_length=max_length,
+    )
+
+    outputs = model(**inputs)
+    logits = outputs.logits  # shape: (1, num_labels)
+    probs = tf.nn.softmax(logits, axis=-1).numpy()[0]
+    pred_id = int(np.argmax(probs))
+    label = ID2LABEL.get(pred_id, str(pred_id))
+
     if return_probabilities:
-        probabilities = model.predict_proba(text_tfidf)[0]
-        class_labels = model.classes_
-        prob_dict = {label: prob for label, prob in zip(class_labels, probabilities)}
+        prob_dict = {ID2LABEL.get(i, str(i)): float(p) for i, p in enumerate(probs)}
         return {
-            'prediction': prediction,
+            'prediction': label,
             'probabilities': prob_dict,
-            'confidence': max(probabilities)
+            'confidence': float(probs[pred_id]),
         }
-    
-    return prediction
+
+    return label
 
 
-def batch_predict(texts, vectorizer, model, return_probabilities=False):
+def batch_predict(
+    texts: List[str],
+    tokenizer: AutoTokenizer,
+    model: TFAutoModelForSequenceClassification,
+    return_probabilities: bool = False,
+    max_length: int = 256,
+) -> List[Union[str, Dict[str, Union[str, float, Dict[str, float]]]]]:
     """
     Make predictions on multiple texts.
-    
+
     Args:
-        texts (list): List of input texts
-        vectorizer: Fitted TF-IDF vectorizer
-        model: Trained LogisticRegression model
-        return_probabilities (bool): If True, return probabilities for each prediction
-        
+        texts: List of input texts.
+        tokenizer: Loaded tokenizer.
+        model: Loaded TF sequence classification model.
+        return_probabilities: If True, return probabilities for each prediction.
+        max_length: Tokenization max sequence length.
+
     Returns:
-        list: List of predictions or dicts with predictions and probabilities
+        List of predictions or dicts with predictions and probabilities.
     """
-    results = []
+    results: List[Union[str, Dict[str, Union[str, float, Dict[str, float]]]]] = []
     for text in texts:
-        result = predict(text, vectorizer, model, return_probabilities)
+        result = predict(
+            text,
+            tokenizer,
+            model,
+            return_probabilities=return_probabilities,
+            max_length=max_length,
+        )
         results.append(result)
     return results
 
 
 if __name__ == '__main__':
-    # Example usage
+    # Minimal CLI test
     print("=" * 60)
-    print("Model Usage Example")
+    print("BERT Model Usage Example")
     print("=" * 60)
-    
-    # Load model
-    vectorizer, model = load_model('models/tfidf_logreg_sinhala.joblib')
-    
+
+    tokenizer, model = load_model('models/bert_multilingual_model')
+
     # Example 1: Single prediction without probabilities
     print("\n--- Example 1: Single Prediction ---")
-    sample_text = "අනාගතයේ නගරය අතිශය නවීන තාක්ෂණික විප්ලවයක මධ්‍යස්ථානයකි. ගගනචුම්බී ගොඩනැගිලි සූර්ය ශක්තියෙන් ක්‍රියා කරමින්, වායු දූෂණය අවම කරයි. මෝටර් රථ නොව, ගුවන් මාර්ගවල ගමන් කරන නවීන ගුවන් රථ භාවිතා වේ. නගරයේ සියලුම පද්ධති – විදුලි, ජලය, ආහාර බෙදාහැරීම – කෘත්‍රිම බුද්ධියෙන් පාලනය වේ. පුරවැසියන්ට නිදහස් වෙලාව වැඩි වන අතර, පරිසරය සහ තාක්ෂණය එකට එකතු වී ශාන්ත සහ සුරක්ෂිත ජීවිතයකට පත් කරයි. මේ නගරය යනු මානව සහ යන්ත්‍ර අතර සම්පූර්ණ සමගියක ලෝකයකට මඟ පෙන්වන අනාගතයේ දර්ශනයකි."
-    prediction = predict(sample_text, vectorizer, model)
+    sample_text = (
+        "ශ්‍රී ලංකාවේ කෘෂිකර්මය ප්‍රධාන වශයෙන් සහල් නිෂ්පාදනය මත රදා පවතී. එහි ප්‍රධාන අරමුණ වන්නේ වැඩි දියුණු කරන ලද කෘෂිකාර්මික තාක්ෂණය ව්‍යාප්තිය හා සංවර්ධනය තුළින් ස්ථිර හා සාධාරණ කෘෂිකාර්මික දියුණුවක් ලබා ගැනීමයි. මෙම අවසානය ලබා ගැනීම සදහා ශ්‍රී ලංකා රජය සතුව කෘෂිකාර්මික දෙපාර්තමේන්තුවක් පිහිටුවා ඇත. Department of Agriculture - Sri Lanka (DOASL). මෙහි මූලික ක්‍රියාවලි ලෙස පර්යේෂණ,විස්තාරිත, බීජ රෝපණය සහ පැළ සිටවීම, ද්‍රව්‍ය නිෂ්පාදනය, නියාමක සේවා, පැළෑටි නිරෝධායනය, කෘමිනාශක ද්‍රව්‍ය ලියාපදිංචිය සැළකිය හැක. දෙපාර්තමේන්තුවෙහි මාධ්‍ය සැපයුම් ඒකකය වන්නේ ශ්‍රී ලංකා ශ්‍රව්‍ය දෘශ්‍ය කේන්ද්‍රයයි Audio Visual Centre(AVC)-Sri Lanka"
+    )
+    prediction = predict(sample_text, tokenizer, model)
     print(f"Text: {sample_text}")
     print(f"Prediction: {prediction}")
+
+    # Example 2: With probabilities
+    print("\n--- Example 2: With Probabilities ---")
+    result = predict(sample_text, tokenizer, model, return_probabilities=True)
+    print(result)
     
