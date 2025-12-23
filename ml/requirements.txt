@@ -1,6 +1,8 @@
 pandas
 scikit-learn
 joblib
+fastapi
+uvicorn[standard]
 # Optional (transformer fine-tuning):
 transformers
 datasets
