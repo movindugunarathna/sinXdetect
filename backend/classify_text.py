@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""
-Sinhala Text Classification Script using BERT Multilingual Model
-Classifies text as HUMAN-generated or AI-generated
-"""
 
 import os
 import sys
 import warnings
 import argparse
+import json
+import joblib
 from pathlib import Path
 import numpy as np
 
@@ -18,11 +16,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
-from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL_DIR = REPO_ROOT / "ml" / "models" / "bert_multilingual_model"
+DEFAULT_MODEL_DIR = REPO_ROOT / "ml" / "models" / "bilstm_sinhala_model"
 
 
 def _resolve_model_path(raw_path: str) -> str:
@@ -40,28 +36,88 @@ class SinhalaTextClassifier:
     
     def __init__(self, model_path=None):
         """
-        Initialize the classifier with the trained BERT model.
+        Initialize the classifier with the trained BiLSTM model.
         
         Args:
-            model_path (str): Path to the saved BERT model directory
+            model_path (str): Path to the saved BiLSTM model directory
         """
         raw_model_path = model_path or str(DEFAULT_MODEL_DIR)
-        self.model_path = _resolve_model_path(raw_model_path)
-        self.label_mapping = {0: 'HUMAN', 1: 'AI'}
+        self.model_path = Path(_resolve_model_path(raw_model_path))
         
-        print("Loading model and tokenizer...")
+        print("Loading BiLSTM model and preprocessing assets...")
         try:
-            # Load tokenizer
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+            # Load the Keras model
+            model_file = self.model_path / 'saved_model.keras'
+            if not model_file.exists():
+                raise FileNotFoundError(f"Model file not found: {model_file}")
             
-            # Load model
-            self.model = TFAutoModelForSequenceClassification.from_pretrained(
-                self.model_path
+            self.model = tf.keras.models.load_model(model_file)
+            print("✓ Model loaded successfully!")
+            
+            # Load label encoder
+            label_encoder_file = self.model_path / 'label_encoder.joblib'
+            if not label_encoder_file.exists():
+                raise FileNotFoundError(f"Label encoder not found: {label_encoder_file}")
+            
+            self.label_encoder = joblib.load(label_encoder_file)
+            print("✓ Label encoder loaded!")
+            
+            # Load text vectorizer configuration and weights
+            vectorizer_config_file = self.model_path / 'vectorizer_config.json'
+            vectorizer_weights_file = self.model_path / 'vectorizer_weights.npz'
+            
+            if not vectorizer_config_file.exists():
+                raise FileNotFoundError(f"Vectorizer config not found: {vectorizer_config_file}")
+            if not vectorizer_weights_file.exists():
+                raise FileNotFoundError(f"Vectorizer weights not found: {vectorizer_weights_file}")
+            
+            with open(vectorizer_config_file, 'r', encoding='utf-8') as f:
+                vectorizer_config = json.load(f)
+            
+            # Create the text vectorizer with the same configuration
+            self.text_vectorizer = tf.keras.layers.TextVectorization(
+                max_tokens=vectorizer_config['max_tokens'],
+                output_mode=vectorizer_config['output_mode'],
+                output_sequence_length=vectorizer_config['output_sequence_length'],
+                standardize=vectorizer_config.get('standardize', 'lower_and_strip_punctuation')
             )
-            print("✓ Model loaded successfully!\n")
-            print(self.model)
+            
+            # Load weights which should contain the vocabulary
+            weights_data = np.load(vectorizer_weights_file, allow_pickle=True)
+            
+            if len(weights_data.files) == 0:
+                # Weights file is empty - need to re-adapt the vectorizer
+                print("⚠ Vectorizer weights file is empty. The model needs to be retrained with proper vectorizer saving.")
+                print("⚠ Using BERT model as fallback...")
+                # Try to use BERT model instead
+                bert_model_path = self.model_path.parent / 'bert_multilingual_model'
+                if bert_model_path.exists():
+                    from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+                    self.tokenizer = AutoTokenizer.from_pretrained(str(bert_model_path))
+                    self.model = TFAutoModelForSequenceClassification.from_pretrained(str(bert_model_path))
+                    self.use_bert = True
+                    print("✓ BERT model loaded as fallback!")
+                    return
+                else:
+                    raise ValueError("BiLSTM vectorizer weights are missing and BERT model not found. Please retrain the BiLSTM model.")
+            
+            weights = [weights_data[key] for key in weights_data.files]
+            
+            # Extract vocabulary from weights
+            # The first weight array contains the vocabulary
+            vocab = weights[0]
+            
+            # Adapt using the vocabulary
+            self.text_vectorizer.set_vocabulary(vocab)
+            self.use_bert = False
+            print("✓ Text vectorizer loaded!")
+            
+            print("✓ All components loaded successfully!\n")
+            
         except Exception as e:
             print(f"✗ Error loading model: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
     
     def preprocess_text(self, text):
@@ -72,21 +128,25 @@ class SinhalaTextClassifier:
             text (str): Input text to preprocess
             
         Returns:
-            dict: Tokenized inputs with input_ids and attention_mask
+            Vectorized text ready for model input
         """
-        # Tokenize text
-        encodings = self.tokenizer(
-            text,
-            max_length=128,
-            truncation=True,
-            padding='max_length',
-            return_tensors='tf'
-        )
-        
-        return {
-            'input_ids': encodings['input_ids'],
-            'attention_mask': encodings['attention_mask']
-        }
+        if hasattr(self, 'use_bert') and self.use_bert:
+            # BERT preprocessing
+            encodings = self.tokenizer(
+                text,
+                max_length=128,
+                truncation=True,
+                padding='max_length',
+                return_tensors='tf'
+            )
+            return {
+                'input_ids': encodings['input_ids'],
+                'attention_mask': encodings['attention_mask']
+            }
+        else:
+            # BiLSTM preprocessing
+            vectorized = self.text_vectorizer([text])
+            return vectorized
     
     def classify(self, text, return_probabilities=False):
         """
@@ -103,16 +163,17 @@ class SinhalaTextClassifier:
         inputs = self.preprocess_text(text)
         
         # Make prediction
-        predictions = self.model.predict(inputs, verbose=0)
-        
-        # Get logits and convert to probabilities
-        logits = predictions.logits[0]
-        probabilities = tf.nn.softmax(logits).numpy()
+        if hasattr(self, 'use_bert') and self.use_bert:
+            predictions = self.model.predict(inputs, verbose=0)
+            logits = predictions.logits[0]
+            probabilities = tf.nn.softmax(logits).numpy()
+        else:
+            probabilities = self.model.predict(inputs, verbose=0)[0]
         
         # Get predicted class and confidence
         predicted_class = np.argmax(probabilities)
         confidence = probabilities[predicted_class]
-        predicted_label = self.label_mapping[predicted_class]
+        predicted_label = self.label_encoder.inverse_transform([predicted_class])[0]
         
         result = {
             'label': predicted_label,
@@ -120,10 +181,10 @@ class SinhalaTextClassifier:
         }
         
         if return_probabilities:
-            result['probabilities'] = {
-                'HUMAN': float(probabilities[0]),
-                'AI': float(probabilities[1])
-            }
+            probs_dict = {}
+            for idx, class_name in enumerate(self.label_encoder.classes_):
+                probs_dict[class_name] = float(probabilities[idx])
+            result['probabilities'] = probs_dict
         
         return result
     
@@ -165,8 +226,8 @@ def main():
     parser.add_argument(
         '--model',
         '-m',
-        default='models/bert_multilingual_model',
-        help='Path to the BERT model directory (default: models/bert_multilingual_model)'
+        default='models/bilstm_sinhala_model',
+        help='Path to the BILSTM Sinhala model directory (default: models/bilstm_sinhala_model)'
     )
     parser.add_argument(
         '--probabilities',

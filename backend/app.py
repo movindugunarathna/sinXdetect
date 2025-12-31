@@ -1,9 +1,3 @@
-"""
-FastAPI backend to serve the Sinhala Human vs AI text classifier.
-Exposes endpoints for single and batch classification while loading the
-BERT-based model once at startup.
-"""
-
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -15,7 +9,7 @@ from pydantic import BaseModel
 from classify_text import SinhalaTextClassifier
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "bert_multilingual_model"
+DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "bilstm_sinhala_model"
 
 
 def _resolve_model_path(raw_path: str) -> str:
@@ -37,7 +31,7 @@ app = FastAPI(
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins like ["http://localhost:5173"]
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -6,7 +6,7 @@ Example usage of the Sinhala Text Classifier
 from classify_text import SinhalaTextClassifier
 
 # Initialize the classifier
-classifier = SinhalaTextClassifier(model_path='models/bert_multilingual_model')
+classifier = SinhalaTextClassifier(model_path='models/bilstm_sinhala_model')
 
 # Example 1: Classify a single Sinhala text
 print("Example 1: Single text classification")
