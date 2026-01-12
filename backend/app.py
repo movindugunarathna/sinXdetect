@@ -1,9 +1,3 @@
-"""
-FastAPI backend to serve the Sinhala Human vs AI text classifier.
-Exposes endpoints for single and batch classification while loading the
-BERT-based model once at startup.
-"""
-
 import os
 from pathlib import Path
 from typing import List, Optional
