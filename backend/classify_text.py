@@ -15,6 +15,9 @@ import numpy as np
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+# Set environment variable for TensorFlow/Keras compatibility
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
+
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
@@ -37,32 +40,50 @@ class SinhalaTextClassifier:
     """
     A classifier for Sinhala text to detect if it's human or AI generated.
     """
-    
     def __init__(self, model_path=None):
-        """
-        Initialize the classifier with the trained BERT model.
-        
-        Args:
-            model_path (str): Path to the saved BERT model directory
-        """
         raw_model_path = model_path or str(DEFAULT_MODEL_DIR)
         self.model_path = _resolve_model_path(raw_model_path)
         self.label_mapping = {0: 'HUMAN', 1: 'AI'}
         
         print("Loading model and tokenizer...")
+        print(f"Model path: {self.model_path}")
+        
         try:
-            # Load tokenizer
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+            # Verify model directory exists
+            model_dir = Path(self.model_path)
+            if not model_dir.exists():
+                raise FileNotFoundError(f"Model directory not found: {self.model_path}")
             
-            # Load model
+            # Load tokenizer from local path
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_path,
+                local_files_only=True,
+                trust_remote_code=False
+            )
+            
+            # Load model from local path
             self.model = TFAutoModelForSequenceClassification.from_pretrained(
-                self.model_path
+                self.model_path,
+                local_files_only=True,
+                trust_remote_code=False
             )
             print("✓ Model loaded successfully!\n")
             print(self.model)
         except Exception as e:
-            print(f"✗ Error loading model: {e}")
-            sys.exit(1)
+            error_msg = f"Error loading model: {e}"
+            print(f"✗ {error_msg}")
+            
+            # Check if it's a Keras compatibility issue
+            if "tf-keras" in str(e) or "tf_keras" in str(e):
+                print("\n" + "=" * 60)
+                print("KERAS COMPATIBILITY ISSUE DETECTED")
+                print("=" * 60)
+                print("Solution: Install tf-keras package")
+                print("Run: pip install tf-keras")
+                print("=" * 60 + "\n")
+            
+            # Raise exception instead of sys.exit to allow FastAPI to handle it
+            raise RuntimeError(error_msg) from e
     
     def preprocess_text(self, text):
         """
