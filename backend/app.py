@@ -1,15 +1,19 @@
 import os
 from pathlib import Path
 from typing import List, Optional
+import re
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import numpy as np
+import tensorflow as tf
 
 from classify_text import SinhalaTextClassifier
+from lime.lime_text import LimeTextExplainer
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "bert_multilingual_model"
+DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "sinbert_sinhala_classifier"
 
 
 def _resolve_model_path(raw_path: str) -> str:
@@ -23,9 +27,9 @@ def _resolve_model_path(raw_path: str) -> str:
 MODEL_PATH = _resolve_model_path(os.getenv("MODEL_PATH", str(DEFAULT_MODEL_PATH)))
 
 app = FastAPI(
-    title="Sinhala Human vs AI Text Classifier",
-    version="1.0.0",
-    description="API for classifying Sinhala text as human- or AI-generated",
+    title="Sinhala Human vs AI Text Classifier with Explainability",
+    version="2.0.0",
+    description="API for classifying Sinhala text as human- or AI-generated using SinBERT model with LIME explanations",
 )
 
 # Add CORS middleware to allow frontend requests
@@ -84,9 +88,46 @@ class BatchPredictionResponse(BaseModel):
     results: List[PredictionResponse]
 
 
+class ExplainRequest(BaseModel):
+    text: str
+    num_samples: int = 100
+    num_features: Optional[int] = None
+
+
+class ExplanationResponse(BaseModel):
+    explanation_data: dict
+    highlighted_text: List[dict]
+    predicted_class: str
+    confidence: float
+    error: Optional[str] = None
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/")
+async def root() -> dict:
+    """Root endpoint with API information"""
+    return {
+        "message": "Sinhala Human vs AI Text Classifier API",
+        "version": "2.0.0",
+        "model": "SinBERT",
+        "endpoints": {
+            "/classify": "POST - Classify a single text as human or AI-generated",
+            "/classify-batch": "POST - Classify multiple texts in batch",
+            "/explain": "POST - Get LIME explanation for text classification with word highlighting",
+            "/health": "GET - Health check",
+            "/docs": "GET - API documentation (Swagger UI)"
+        },
+        "features": {
+            "classification": "Binary classification (HUMAN vs AI)",
+            "batch_processing": "Efficient batch text classification",
+            "explainability": "LIME-based word importance highlighting",
+            "multilingual": "Optimized for Sinhala text"
+        }
+    }
 
 
 @app.post("/classify", response_model=PredictionResponse)
@@ -122,6 +163,279 @@ async def classify_batch(request: BatchRequest) -> BatchPredictionResponse:
     for text, resp in zip(request.texts, responses):
         _log_single(text, resp)
     return BatchPredictionResponse(results=responses)
+
+
+# ==================== LIME EXPLANATION FUNCTIONALITY ====================
+
+def predict_for_lime(texts: List[str]) -> np.ndarray:
+    """
+    Predict probability for each text (used by LIME explainer).
+    
+    Args:
+        texts: List of text strings
+        
+    Returns:
+        Array of probabilities for each class [human, ai]
+    """
+    try:
+        if isinstance(texts, str):
+            texts = [texts]
+        
+        classifier = get_classifier()
+        probabilities_list = []
+        
+        for text in texts:
+            result = classifier.classify(text, return_probabilities=True)
+            probs = result['probabilities']
+            # Format as [human_prob, ai_prob]
+            probabilities_list.append([probs['HUMAN'], probs['AI']])
+        
+        return np.array(probabilities_list)
+    except Exception as e:
+        print(f"Error in predict_for_lime: {e}")
+        # Return neutral probabilities if prediction fails
+        return np.array([[0.5, 0.5]] * len(texts))
+
+
+def extract_word_importance(explanation, tokens: List[str], class_idx: int = 1) -> dict:
+    """
+    Extract word importance scores from LIME explanation.
+    
+    Args:
+        explanation: LIME explanation object
+        tokens: List of words in the text
+        class_idx: Class index (1 for AI-generated, 0 for Human-written)
+        
+    Returns:
+        Dictionary with word importance data
+    """
+    word_importance = {}
+    
+    # Get the explanation for the specified class
+    if class_idx in explanation.local_exp:
+        for word_idx, weight in explanation.local_exp[class_idx]:
+            if 0 <= word_idx < len(tokens):
+                word = tokens[word_idx]
+                # Red for supporting AI-generated, green for supporting human-written
+                color = 'red' if weight > 0 else 'green'
+                word_importance[word_idx] = {
+                    'weight': weight,
+                    'color': color,
+                    'token': word
+                }
+    
+    return word_importance
+
+
+def group_into_phrases(word_importance: dict, tokens: List[str], token_positions: List[tuple], max_gap: int = 1) -> List[dict]:
+    """
+    Group consecutive or nearby important words into phrases.
+    
+    Args:
+        word_importance: Dict mapping word indices to their importance data
+        tokens: List of all tokens
+        token_positions: List of (start, end) positions for each token
+        max_gap: Maximum number of non-important words between important words to still group them
+        
+    Returns:
+        List of phrase dictionaries
+    """
+    if not word_importance:
+        return []
+    
+    # Sort indices
+    sorted_indices = sorted(word_importance.keys())
+    phrases = []
+    current_phrase = {
+        'indices': [sorted_indices[0]],
+        'weights': [word_importance[sorted_indices[0]]['weight']],
+        'color': word_importance[sorted_indices[0]]['color']
+    }
+    
+    for i in range(1, len(sorted_indices)):
+        curr_idx = sorted_indices[i]
+        prev_idx = current_phrase['indices'][-1]
+        gap = curr_idx - prev_idx - 1
+        
+        # Check if same color and within gap threshold
+        same_color = word_importance[curr_idx]['color'] == current_phrase['color']
+        within_gap = gap <= max_gap
+        
+        if same_color and within_gap:
+            # Extend current phrase
+            current_phrase['indices'].append(curr_idx)
+            current_phrase['weights'].append(word_importance[curr_idx]['weight'])
+        else:
+            # Finalize current phrase and start new one
+            phrases.append(current_phrase)
+            current_phrase = {
+                'indices': [curr_idx],
+                'weights': [word_importance[curr_idx]['weight']],
+                'color': word_importance[curr_idx]['color']
+            }
+    
+    # Add the last phrase
+    phrases.append(current_phrase)
+    
+    # Convert phrases to output format
+    highlighted_phrases = []
+    for phrase_group in phrases:
+        indices = phrase_group['indices']
+        weights = phrase_group['weights']
+        color = phrase_group['color']
+        
+        # Build the phrase text
+        phrase_words = [tokens[idx] for idx in indices]
+        phrase_text = ' '.join(phrase_words)
+        
+        # Calculate average weight for the phrase
+        avg_weight = sum(weights) / len(weights)
+        
+        # Get start and end positions in original text
+        start_pos = token_positions[indices[0]][0] if indices[0] < len(token_positions) else 0
+        end_pos = token_positions[indices[-1]][1] if indices[-1] < len(token_positions) else 0
+        
+        # Determine what this phrase indicates
+        indicates = 'AI-generated' if color == 'red' else 'Human-written'
+        
+        highlighted_phrases.append({
+            'phrase': phrase_text,
+            'color': color,
+            'weight': float(avg_weight),
+            'start': start_pos,
+            'end': end_pos,
+            'word_count': len(phrase_words),
+            'indicates': indicates
+        })
+    
+    return highlighted_phrases
+
+
+@app.post("/explain", response_model=ExplanationResponse)
+async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
+    """
+    Explain the prediction for a given text using LIME.
+    Highlights words/phrases that contribute to AI vs Human classification.
+    
+    Args:
+        request: ExplainRequest with text field and optional parameters
+        
+    Returns:
+        JSON with explanation data and highlighted text
+    """
+    try:
+        text = request.text
+        
+        if not text or not text.strip():
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
+        
+        # Tokenize the text (word-level tokenization for LIME)
+        word_pattern = re.compile(r'\S+')
+        matches = list(word_pattern.finditer(text))
+        tokens = [match.group() for match in matches]
+        token_positions = [(match.start(), match.end()) for match in matches]
+        
+        # Check if we have enough tokens for LIME
+        if len(tokens) < 2:
+            raise HTTPException(status_code=400, detail="Text must contain at least 2 words for explanation")
+        
+        # Create LimeTextExplainer instance
+        explainer = LimeTextExplainer(
+            class_names=['Human-written', 'AI-generated'],
+            split_expression=r'\s+',  # Split on whitespace
+            bow=False  # Keep word order
+        )
+        
+        # Calculate appropriate num_features
+        num_features = request.num_features
+        if num_features is None:
+            num_features = max(1, min(len(tokens), 15))
+        else:
+            num_features = max(1, min(num_features, len(tokens)))
+        
+        print(f"Explaining text with {len(tokens)} tokens, using {num_features} features...")
+        
+        # Explain prediction
+        try:
+            explanation = explainer.explain_instance(
+                text,
+                predict_for_lime,
+                labels=(0, 1),
+                num_features=num_features,
+                num_samples=request.num_samples
+            )
+            
+            # Get prediction probabilities
+            prediction_proba = predict_for_lime([text])[0]
+            
+            # Extract explanation information
+            explanation_data = {
+                'class_names': list(map(str, explanation.class_names)),
+                'predicted_probability': list(map(float, prediction_proba)),
+                'local_exp': {
+                    str(class_name): {
+                        str(idx): float(weight)
+                        for idx, weight in exp
+                    }
+                    for class_name, exp in explanation.local_exp.items()
+                },
+                'intercept': list(map(float, explanation.intercept)) if hasattr(explanation, 'intercept') else [0.0, 0.0]
+            }
+            
+            # Extract word importance for AI-generated class (class 1)
+            word_importance = extract_word_importance(explanation, tokens, class_idx=1)
+            
+            # Filter by minimum importance threshold
+            word_importance = {
+                idx: data for idx, data in word_importance.items()
+                if abs(data['weight']) > 0.01
+            }
+            
+            # Group words into phrases
+            highlighted_text = group_into_phrases(word_importance, tokens, token_positions, max_gap=1)
+            
+            # Sort by absolute weight (most important first)
+            highlighted_text.sort(key=lambda x: abs(x['weight']), reverse=True)
+            
+            predicted_class = 'AI-generated' if prediction_proba[1] > 0.5 else 'Human-written'
+            confidence = float(max(prediction_proba))
+            
+            return ExplanationResponse(
+                explanation_data=explanation_data,
+                highlighted_text=highlighted_text,
+                predicted_class=predicted_class,
+                confidence=confidence
+            )
+            
+        except Exception as lime_error:
+            print(f"LIME error: {lime_error}")
+            # If LIME fails, return a simple explanation with just the prediction
+            prediction_proba = predict_for_lime([text])[0]
+            predicted_class = 'AI-generated' if prediction_proba[1] > 0.5 else 'Human-written'
+            
+            return ExplanationResponse(
+                explanation_data={
+                    'class_names': ['Human-written', 'AI-generated'],
+                    'predicted_probability': list(map(float, prediction_proba)),
+                    'local_exp': {},
+                    'intercept': [0.0, 0.0]
+                },
+                highlighted_text=[],
+                predicted_class=predicted_class,
+                confidence=float(max(prediction_proba)),
+                error='Unable to generate detailed explanation for this text'
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Error in explain endpoint: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+
+
+# ==================== END LIME EXPLANATION FUNCTIONALITY ====================
 
 
 if __name__ == "__main__":

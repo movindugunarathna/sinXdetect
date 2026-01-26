@@ -1,0 +1,11 @@
+{
+  "model_name": "NLPC-UOM/SinBERT-large",
+  "max_length": 256,
+  "batch_size": 16,
+  "learning_rate": 2e-05,
+  "epochs": 3,
+  "label_mapping": {
+    "HUMAN": 0,
+    "AI": 1
+  }
+}

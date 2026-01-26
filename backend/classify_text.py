@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sinhala Text Classification Script using BERT Multilingual Model
+Sinhala Text Classification Script using SinBERT Model
 Classifies text as HUMAN-generated or AI-generated
 """
 
@@ -25,7 +25,7 @@ from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL_DIR = REPO_ROOT / "ml" / "models" / "bert_multilingual_model"
+DEFAULT_MODEL_DIR = REPO_ROOT / "ml" / "models" / "sinbert_sinhala_classifier"
 
 
 def _resolve_model_path(raw_path: str) -> str:
@@ -39,6 +39,7 @@ def _resolve_model_path(raw_path: str) -> str:
 class SinhalaTextClassifier:
     """
     A classifier for Sinhala text to detect if it's human or AI generated.
+    Uses SinBERT (Sinhala BERT) model for classification.
     """
     def __init__(self, model_path=None):
         raw_model_path = model_path or str(DEFAULT_MODEL_DIR)
@@ -182,12 +183,12 @@ def main():
         '--file',
         '-f',
         help='Path to file containing text to classify'
-    )
+    )    
     parser.add_argument(
         '--model',
         '-m',
-        default='models/bert_multilingual_model',
-        help='Path to the BERT model directory (default: models/bert_multilingual_model)'
+        default='ml/models/sinbert_sinhala_classifier',
+        help='Path to the SinBERT model directory (default: ml/models/sinbert_sinhala_classifier)'
     )
     parser.add_argument(
         '--probabilities',
