@@ -1,0 +1,33 @@
+version: '3.8'
+
+# Development-specific docker-compose configuration
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      # Mount source code for hot-reload
+      - ./backend:/app
+      - ./ml/models:/app/ml/models:ro
+    environment:
+      - MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
+      - PYTHONUNBUFFERED=1
+      - DEBUG=1
+    command:
+      ['uvicorn', 'app:app', '--host', '0.0.0.0', '--port', '8000', '--reload']
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    ports:
+      - '5173:5173'
+    command: ['npm', 'run', 'dev', '--', '--host']
