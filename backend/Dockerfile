@@ -13,7 +13,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install TensorFlow first, then transformers to ensure TF models are available
+RUN pip install --no-cache-dir tensorflow>=2.15.0,<2.16.0 tf-keras>=2.15.0,<2.16.0 && \
+    pip install --no-cache-dir transformers>=4.35.0,<5.0.0 && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
 COPY . .
