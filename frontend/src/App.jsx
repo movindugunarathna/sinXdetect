@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import './App.css';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:9000';
+const API_BASE = import.meta.env.VITE_API_URL ?? 'https://api.sinxdetect.movindu.com';
 
 function App() {
   const [text, setText] = useState('');
