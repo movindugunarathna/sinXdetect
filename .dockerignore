@@ -4,7 +4,9 @@
 .gitattributes
 
 # Docker
-Dockerfile
+# Exclude sub-directory Dockerfiles but keep root Dockerfile for Digital Ocean
+backend/Dockerfile
+frontend/Dockerfile
 docker-compose*.yml
 .dockerignore
 
