@@ -1,0 +1,25 @@
+name: sinxdetect
+region: sgp
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    source_dir: /
+    http_port: 80
+    instance_size_slug: professional-xs
+    instance_count: 1
+    health_check:
+      http_path: /
+      initial_delay_seconds: 120
+      period_seconds: 30
+      timeout_seconds: 30
+      success_threshold: 1
+      failure_threshold: 5
+    routes:
+      - path: /
+    envs:
+      - key: PYTHONUNBUFFERED
+        value: '1'
+      - key: MODEL_PATH
+        value: '/app/ml/models/sinbert_sinhala_classifier'
+      - key: UVICORN_WORKERS
+        value: '1'
