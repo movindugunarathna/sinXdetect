@@ -56,163 +56,19 @@ COPY backend/ ./backend/
 RUN mkdir -p /app/ml/models
 
 # Copy ML models if they exist (for deployments that include models)
-# Note: If ml/models/ doesn't exist in your build context, you can either:
-# 1. Create an empty ml/models/ directory before building
-# 2. Mount models at runtime using volumes
-# 3. Remove this COPY if models will be provided externally
 COPY ml/models/ ./ml/models/
 
 # Copy built frontend from builder stage
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
 # Remove default nginx configuration if it exists
-RUN if [ -f /etc/nginx/sites-enabled/default ]; then rm /etc/nginx/sites-enabled/default; fi
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf
 
-# Create nginx configuration for serving frontend and proxying API
-RUN cat > /etc/nginx/conf.d/sinxdetect.conf << 'EOF'
-# Frontend server - sinxdetect.movindu.com
-server {
-    listen 80;
-    server_name sinxdetect.movindu.com;
-    root /usr/share/nginx/html;
-    index index.html;
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/sinxdetect.conf
 
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
-
-    # Handle client-side routing for SPA
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Cache static assets
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-}
-
-# API server - api.sinxdetect.movindu.com
-server {
-    listen 80;
-    server_name api.sinxdetect.movindu.com;
-
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
-
-    # Proxy all requests to backend
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-        
-        # CORS headers for API
-        add_header Access-Control-Allow-Origin "https://sinxdetect.movindu.com" always;
-        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
-        add_header Access-Control-Allow-Credentials "true" always;
-        
-        # Handle preflight requests
-        if ($request_method = 'OPTIONS') {
-            add_header Access-Control-Allow-Origin "https://sinxdetect.movindu.com" always;
-            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-            add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
-            add_header Access-Control-Allow-Credentials "true" always;
-            add_header Content-Length 0;
-            add_header Content-Type text/plain;
-            return 204;
-        }
-    }
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-}
-
-# Default server for localhost/IP access (optional fallback)
-server {
-    listen 80 default_server;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
-
-    # Proxy API requests to backend (for /api/ path)
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-    }
-
-    # Handle client-side routing for SPA
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Cache static assets
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-EOF
-
-# Create supervisor configuration to run both nginx and uvicorn
-# UVICORN_WORKERS can be overridden at runtime via environment variable
-RUN cat > /etc/supervisor/conf.d/sinxdetect.conf << 'EOF'
-[supervisord]
-nodaemon=true
-user=root
-
-[program:nginx]
-command=/usr/sbin/nginx -g "daemon off;"
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/nginx/error.log
-stdout_logfile=/var/log/nginx/access.log
-
-[program:backend]
-command=/bin/sh -c "uvicorn backend.app:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}"
-directory=/app
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/backend.err.log
-stdout_logfile=/var/log/backend.out.log
-environment=PYTHONUNBUFFERED="1",MODEL_PATH="/app/ml/models/sinbert_sinhala_classifier"
-EOF
+# Copy supervisor configuration
+COPY supervisord.conf /etc/supervisor/conf.d/sinxdetect.conf
 
 # Expose port 80 (nginx serves both frontend and proxies to backend)
 EXPOSE 80
