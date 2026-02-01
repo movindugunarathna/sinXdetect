@@ -5,15 +5,15 @@ services:
     dockerfile_path: Dockerfile
     source_dir: /
     http_port: 80
-    instance_size_slug: professional-xs
+    instance_size_slug: professional-s
     instance_count: 1
     health_check:
       http_path: /
-      initial_delay_seconds: 120
+      initial_delay_seconds: 180
       period_seconds: 30
       timeout_seconds: 30
       success_threshold: 1
-      failure_threshold: 5
+      failure_threshold: 10
     routes:
       - path: /
     envs:
