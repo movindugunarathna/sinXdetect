@@ -76,10 +76,10 @@ EXPOSE 80
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
-ENV UVICORN_WORKERS=2
+ENV UVICORN_WORKERS=1
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# Health check - longer start period for ML model loading
+HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=5 \
     CMD wget --quiet --tries=1 --spider http://localhost:80/ || exit 1
 
 # Start supervisor which manages both nginx and backend
