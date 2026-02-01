@@ -5,15 +5,15 @@ services:
     dockerfile_path: Dockerfile
     source_dir: /
     http_port: 80
-    instance_size_slug: professional-s
+    instance_size_slug: professional-m
     instance_count: 1
     health_check:
       http_path: /
-      initial_delay_seconds: 180
+      initial_delay_seconds: 300
       period_seconds: 30
-      timeout_seconds: 30
+      timeout_seconds: 60
       success_threshold: 1
-      failure_threshold: 10
+      failure_threshold: 15
     routes:
       - path: /
     envs:
@@ -23,3 +23,5 @@ services:
         value: '/app/ml/models/sinbert_sinhala_classifier'
       - key: UVICORN_WORKERS
         value: '1'
+      - key: TF_CPP_MIN_LOG_LEVEL
+        value: '2'
