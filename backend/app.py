@@ -9,7 +9,10 @@ from pydantic import BaseModel
 import numpy as np
 import tensorflow as tf
 
-from classify_text import SinhalaTextClassifier
+try:
+    from classify_text import SinhalaTextClassifier
+except ImportError:
+    from backend.classify_text import SinhalaTextClassifier
 from lime.lime_text import LimeTextExplainer
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -35,7 +38,12 @@ app = FastAPI(
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins like ["http://localhost:5173"]
+    allow_origins=[
+        "https://sinxdetect.movindu.com",
+        "http://sinxdetect.movindu.com",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
