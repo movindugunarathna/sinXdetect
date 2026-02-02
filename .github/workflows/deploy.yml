@@ -12,9 +12,9 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          port: ${{ secrets.DROPLET_PORT || 22 }}
+          username: root
+          password: ${{ secrets.DROPLET_PASSWORD }}
+          port: 22
           script: |
             set -e
             cd /opt/sinxdetect
