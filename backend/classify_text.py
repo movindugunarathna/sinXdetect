@@ -148,10 +148,9 @@ class SinhalaTextClassifier:
             }
         
         return result
-    
-    def classify_batch(self, texts, return_probabilities=False):
+      def classify_batch(self, texts, return_probabilities=False):
         """
-        Classify multiple texts at once.
+        Classify multiple texts at once using batch processing for efficiency.
         
         Args:
             texts (list): List of texts to classify
@@ -160,10 +159,49 @@ class SinhalaTextClassifier:
         Returns:
             list: List of classification results for each text
         """
+        if not texts:
+            return []
+        
+        # Batch tokenize all texts
+        encodings = self.tokenizer(
+            texts,
+            max_length=128,
+            truncation=True,
+            padding='max_length',
+            return_tensors='tf'
+        )
+        
+        inputs = {
+            'input_ids': encodings['input_ids'],
+            'attention_mask': encodings['attention_mask']
+        }
+        
+        # Make batch prediction
+        predictions = self.model.predict(inputs, verbose=0, batch_size=min(32, len(texts)))
+        
+        # Process results
         results = []
-        for text in texts:
-            result = self.classify(text, return_probabilities)
+        for i in range(len(texts)):
+            logits = predictions.logits[i]
+            probabilities = tf.nn.softmax(logits).numpy()
+            
+            predicted_class = np.argmax(probabilities)
+            confidence = probabilities[predicted_class]
+            predicted_label = self.label_mapping[predicted_class]
+            
+            result = {
+                'label': predicted_label,
+                'confidence': float(confidence)
+            }
+            
+            if return_probabilities:
+                result['probabilities'] = {
+                    'HUMAN': float(probabilities[0]),
+                    'AI': float(probabilities[1])
+                }
+            
             results.append(result)
+        
         return results
 
 
