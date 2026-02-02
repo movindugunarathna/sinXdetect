@@ -148,7 +148,8 @@ class SinhalaTextClassifier:
             }
         
         return result
-      def classify_batch(self, texts, return_probabilities=False):
+
+    def classify_batch(self, texts, return_probabilities=False):
         """
         Classify multiple texts at once using batch processing for efficiency.
         
