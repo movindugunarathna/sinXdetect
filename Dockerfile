@@ -77,6 +77,7 @@ EXPOSE 80
 ENV PYTHONUNBUFFERED=1
 ENV MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
 ENV UVICORN_WORKERS=1
+ENV PYTHONPATH=/app:/app/backend
 
 # Health check - longer start period for ML model loading
 HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=5 \
