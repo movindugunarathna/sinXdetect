@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from typing import List, Optional
 import re
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +52,7 @@ app.add_middleware(
 )
 
 _classifier: Optional[SinhalaTextClassifier] = None
+_executor = ThreadPoolExecutor(max_workers=2)  # Thread pool for LIME computations
 
 
 def _log_single(text: str, result: "PredictionResponse") -> None:
@@ -98,7 +101,7 @@ class BatchPredictionResponse(BaseModel):
 
 class ExplainRequest(BaseModel):
     text: str
-    num_samples: int = 100
+    num_samples: int = 50  # Reduced from 100 for faster response
     num_features: Optional[int] = None
 
 
@@ -178,6 +181,7 @@ async def classify_batch(request: BatchRequest) -> BatchPredictionResponse:
 def predict_for_lime(texts: List[str]) -> np.ndarray:
     """
     Predict probability for each text (used by LIME explainer).
+    Optimized for batch processing.
     
     Args:
         texts: List of text strings
@@ -190,15 +194,20 @@ def predict_for_lime(texts: List[str]) -> np.ndarray:
             texts = [texts]
         
         classifier = get_classifier()
-        probabilities_list = []
         
-        for text in texts:
-            result = classifier.classify(text, return_probabilities=True)
+        # Use batch classification for better performance
+        if len(texts) > 1:
+            results = classifier.classify_batch(texts, return_probabilities=True)
+            probabilities_list = []
+            for result in results:
+                probs = result['probabilities']
+                probabilities_list.append([probs['HUMAN'], probs['AI']])
+            return np.array(probabilities_list)
+        else:
+            result = classifier.classify(texts[0], return_probabilities=True)
             probs = result['probabilities']
-            # Format as [human_prob, ai_prob]
-            probabilities_list.append([probs['HUMAN'], probs['AI']])
-        
-        return np.array(probabilities_list)
+            return np.array([[probs['HUMAN'], probs['AI']]])
+            
     except Exception as e:
         print(f"Error in predict_for_lime: {e}")
         # Return neutral probabilities if prediction fails
@@ -319,6 +328,99 @@ def group_into_phrases(word_importance: dict, tokens: List[str], token_positions
     return highlighted_phrases
 
 
+def _run_lime_explanation(text: str, tokens: List[str], token_positions: List[tuple], 
+                          num_features: int, num_samples: int) -> dict:
+    """
+    Run LIME explanation in a separate function (can be executed in thread pool).
+    
+    Returns:
+        dict with explanation results or error
+    """
+    try:
+        # Create LimeTextExplainer instance
+        explainer = LimeTextExplainer(
+            class_names=['Human-written', 'AI-generated'],
+            split_expression=r'\s+',  # Split on whitespace
+            bow=False  # Keep word order
+        )
+        
+        explanation = explainer.explain_instance(
+            text,
+            predict_for_lime,
+            labels=(0, 1),
+            num_features=num_features,
+            num_samples=num_samples
+        )
+        
+        # Get prediction probabilities
+        prediction_proba = predict_for_lime([text])[0]
+        
+        # Extract explanation information
+        explanation_data = {
+            'class_names': list(map(str, explanation.class_names)),
+            'predicted_probability': list(map(float, prediction_proba)),
+            'local_exp': {
+                str(class_name): {
+                    str(idx): float(weight)
+                    for idx, weight in exp
+                }
+                for class_name, exp in explanation.local_exp.items()
+            },
+            'intercept': list(map(float, explanation.intercept)) if hasattr(explanation, 'intercept') else [0.0, 0.0]
+        }
+        
+        # Extract word importance for AI-generated class (class 1)
+        word_importance = extract_word_importance(explanation, tokens, class_idx=1)
+        
+        # Filter by minimum importance threshold
+        word_importance = {
+            idx: data for idx, data in word_importance.items()
+            if abs(data['weight']) > 0.01
+        }
+        
+        # Group words into phrases
+        highlighted_text = group_into_phrases(word_importance, tokens, token_positions, max_gap=1)
+        
+        # Sort by absolute weight (most important first)
+        highlighted_text.sort(key=lambda x: abs(x['weight']), reverse=True)
+        
+        predicted_class = 'AI-generated' if prediction_proba[1] > 0.5 else 'Human-written'
+        confidence = float(max(prediction_proba))
+        
+        return {
+            'success': True,
+            'explanation_data': explanation_data,
+            'highlighted_text': highlighted_text,
+            'predicted_class': predicted_class,
+            'confidence': confidence
+        }
+        
+    except Exception as e:
+        print(f"LIME error: {e}")
+        # Return basic prediction if LIME fails
+        try:
+            prediction_proba = predict_for_lime([text])[0]
+            predicted_class = 'AI-generated' if prediction_proba[1] > 0.5 else 'Human-written'
+            return {
+                'success': False,
+                'explanation_data': {
+                    'class_names': ['Human-written', 'AI-generated'],
+                    'predicted_probability': list(map(float, prediction_proba)),
+                    'local_exp': {},
+                    'intercept': [0.0, 0.0]
+                },
+                'highlighted_text': [],
+                'predicted_class': predicted_class,
+                'confidence': float(max(prediction_proba)),
+                'error': str(e)
+            }
+        except:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+
 @app.post("/explain", response_model=ExplanationResponse)
 async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
     """
@@ -347,77 +449,41 @@ async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
         if len(tokens) < 2:
             raise HTTPException(status_code=400, detail="Text must contain at least 2 words for explanation")
         
-        # Create LimeTextExplainer instance
-        explainer = LimeTextExplainer(
-            class_names=['Human-written', 'AI-generated'],
-            split_expression=r'\s+',  # Split on whitespace
-            bow=False  # Keep word order
-        )
+        # Limit token count to prevent timeout (LIME complexity grows with tokens)
+        MAX_TOKENS = 200
+        if len(tokens) > MAX_TOKENS:
+            print(f"Warning: Text has {len(tokens)} tokens, truncating to {MAX_TOKENS} for LIME analysis")
+            # Keep first MAX_TOKENS tokens
+            tokens = tokens[:MAX_TOKENS]
+            token_positions = token_positions[:MAX_TOKENS]
+            # Truncate text to match
+            text = text[:token_positions[-1][1]]
         
-        # Calculate appropriate num_features
+        # Calculate appropriate num_features (reduced for performance)
         num_features = request.num_features
         if num_features is None:
-            num_features = max(1, min(len(tokens), 15))
+            num_features = max(1, min(len(tokens), 10))  # Reduced from 15 to 10
         else:
-            num_features = max(1, min(num_features, len(tokens)))
+            num_features = max(1, min(num_features, len(tokens), 15))  # Cap at 15
         
-        print(f"Explaining text with {len(tokens)} tokens, using {num_features} features...")
+        print(f"Explaining text with {len(tokens)} tokens, using {num_features} features, {request.num_samples} samples...")
         
-        # Explain prediction
+        # Run LIME explanation with timeout (120 seconds)
+        TIMEOUT_SECONDS = 120
+        loop = asyncio.get_event_loop()
+        
         try:
-            explanation = explainer.explain_instance(
-                text,
-                predict_for_lime,
-                labels=(0, 1),
-                num_features=num_features,
-                num_samples=request.num_samples
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    _run_lime_explanation,
+                    text, tokens, token_positions, num_features, request.num_samples
+                ),
+                timeout=TIMEOUT_SECONDS
             )
-            
-            # Get prediction probabilities
-            prediction_proba = predict_for_lime([text])[0]
-            
-            # Extract explanation information
-            explanation_data = {
-                'class_names': list(map(str, explanation.class_names)),
-                'predicted_probability': list(map(float, prediction_proba)),
-                'local_exp': {
-                    str(class_name): {
-                        str(idx): float(weight)
-                        for idx, weight in exp
-                    }
-                    for class_name, exp in explanation.local_exp.items()
-                },
-                'intercept': list(map(float, explanation.intercept)) if hasattr(explanation, 'intercept') else [0.0, 0.0]
-            }
-            
-            # Extract word importance for AI-generated class (class 1)
-            word_importance = extract_word_importance(explanation, tokens, class_idx=1)
-            
-            # Filter by minimum importance threshold
-            word_importance = {
-                idx: data for idx, data in word_importance.items()
-                if abs(data['weight']) > 0.01
-            }
-            
-            # Group words into phrases
-            highlighted_text = group_into_phrases(word_importance, tokens, token_positions, max_gap=1)
-            
-            # Sort by absolute weight (most important first)
-            highlighted_text.sort(key=lambda x: abs(x['weight']), reverse=True)
-            
-            predicted_class = 'AI-generated' if prediction_proba[1] > 0.5 else 'Human-written'
-            confidence = float(max(prediction_proba))
-            
-            return ExplanationResponse(
-                explanation_data=explanation_data,
-                highlighted_text=highlighted_text,
-                predicted_class=predicted_class,
-                confidence=confidence
-            )
-            
-        except Exception as lime_error:
-            print(f"LIME error: {lime_error}")
-            # If LIME fails, return a simple explanation with just the prediction
+        except asyncio.TimeoutError:
+            print(f"LIME explanation timed out after {TIMEOUT_SECONDS} seconds")
+            # Return a basic prediction without explanation
             prediction_proba = predict_for_lime([text])[0]
             predicted_class = 'AI-generated' if prediction_proba[1] > 0.5 else 'Human-written'
             
@@ -431,7 +497,28 @@ async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
                 highlighted_text=[],
                 predicted_class=predicted_class,
                 confidence=float(max(prediction_proba)),
-                error='Unable to generate detailed explanation for this text'
+                error='Explanation timed out. Try with shorter text or fewer samples.'
+            )
+        
+        if result.get('success', False):
+            return ExplanationResponse(
+                explanation_data=result['explanation_data'],
+                highlighted_text=result['highlighted_text'],
+                predicted_class=result['predicted_class'],
+                confidence=result['confidence']
+            )
+        else:
+            return ExplanationResponse(
+                explanation_data=result.get('explanation_data', {
+                    'class_names': ['Human-written', 'AI-generated'],
+                    'predicted_probability': [0.5, 0.5],
+                    'local_exp': {},
+                    'intercept': [0.0, 0.0]
+                }),
+                highlighted_text=result.get('highlighted_text', []),
+                predicted_class=result.get('predicted_class', 'Unknown'),
+                confidence=result.get('confidence', 0.5),
+                error=result.get('error', 'Unable to generate detailed explanation')
             )
     
     except HTTPException:
