@@ -1,5 +1,7 @@
 # SinXdetect - Sinhala Human vs AI Text Classifier
 
+🌐 **Live Demo**: [https://sinxdetect.movindu.com/](https://sinxdetect.movindu.com/)
+
 A web application that classifies Sinhala text as **Human-written** or **AI-generated** using deep learning models with LIME-based explainability.
 
 ## 📋 Table of Contents
