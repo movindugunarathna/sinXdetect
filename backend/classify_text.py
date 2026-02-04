@@ -19,7 +19,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['TF_USE_LEGACY_KERAS'] = '1'
 
 import tensorflow as tf
-tf.get_logger().setLevel('ERROR')
+# Suppress TensorFlow logging (compatible with TF 2.16+)
+import logging
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
@@ -55,11 +57,12 @@ class SinhalaTextClassifier:
             if not model_dir.exists():
                 raise FileNotFoundError(f"Model directory not found: {self.model_path}")
             
-            # Load tokenizer from local path
+            # Load tokenizer from local path (use slow tokenizer for compatibility)
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_path,
                 local_files_only=True,
-                trust_remote_code=False
+                trust_remote_code=False,
+                use_fast=False
             )
             
             # Load model from local path
