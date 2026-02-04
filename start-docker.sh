@@ -22,13 +22,13 @@ if [ "$MODE" = "dev" ] || [ "$MODE" = "development" ]; then
     echo "   - Backend with hot-reload on http://localhost:8000"
     echo "   - Frontend with hot-reload on http://localhost:5173"
     echo ""
-    docker compose -f docker-compose.dev.yml up --build
+    docker compose -f docker-compose.dev.yml up --build --remove-orphans
 else
     echo "📦 Building and starting in PRODUCTION mode..."
     echo "   - Using unified Dockerfile (frontend + backend combined)"
     echo "   - Application available on http://localhost:3000"
     echo ""
-    docker compose up --build -d
+    docker compose up --build -d --remove-orphans
     
     echo ""
     echo "✅ Services started successfully!"

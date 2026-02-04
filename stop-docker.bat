@@ -21,16 +21,16 @@ goto normal
 
 :clean
 echo Stopping services and removing volumes...
-docker compose down -v
-docker compose -f docker-compose.dev.yml down -v 2>nul
+docker compose down -v --remove-orphans
+docker compose -f docker-compose.dev.yml down -v --remove-orphans 2>nul
 echo.
 echo Services stopped and volumes removed!
 goto end
 
 :normal
 echo Stopping services...
-docker compose down
-docker compose -f docker-compose.dev.yml down 2>nul
+docker compose down --remove-orphans
+docker compose -f docker-compose.dev.yml down --remove-orphans 2>nul
 echo.
 echo Services stopped!
 echo.

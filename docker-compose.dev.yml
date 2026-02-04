@@ -1,8 +1,9 @@
 # filepath: c:\Users\movin\FYP\sinXdetect\docker-compose.dev.yml
-version: '3.8'
-
 # Development-specific docker-compose configuration
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build --remove-orphans
+#   docker compose -f docker-compose.dev.yml down --remove-orphans
 #
 # For development, we run backend and frontend separately for hot-reload support
 

@@ -18,14 +18,14 @@ REMOVE_VOLUMES=${1:-no}
 
 if [ "$REMOVE_VOLUMES" = "clean" ] || [ "$REMOVE_VOLUMES" = "--clean" ]; then
     echo "🧹 Stopping services and removing volumes..."
-    docker compose down -v
-    docker compose -f docker-compose.dev.yml down -v 2>/dev/null || true
+    docker compose down -v --remove-orphans
+    docker compose -f docker-compose.dev.yml down -v --remove-orphans 2>/dev/null || true
     echo ""
     echo "✅ Services stopped and volumes removed!"
 else
     echo "🛑 Stopping services..."
-    docker compose down
-    docker compose -f docker-compose.dev.yml down 2>/dev/null || true
+    docker compose down --remove-orphans
+    docker compose -f docker-compose.dev.yml down --remove-orphans 2>/dev/null || true
     echo ""
     echo "✅ Services stopped!"
     echo ""

@@ -1,5 +1,11 @@
 # filepath: c:\Users\movin\FYP\sinXdetect\docker-compose.yml
-version: '3.8'
+# SinXdetect Production Docker Compose
+#
+# Usage:
+#   docker compose up --build -d --remove-orphans
+#   docker compose down --remove-orphans
+#
+# Note: Use --remove-orphans to clean up old containers from previous config
 
 services:
   # Combined sinXdetect Application (Frontend + Backend)
