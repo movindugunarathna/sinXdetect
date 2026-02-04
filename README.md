@@ -70,11 +70,13 @@ sinXdetect/
 - Python 3.11+
 - Node.js 18+
 - npm or yarn
+- **Git LFS** (for pulling trained ML models) - [Installation Guide](https://git-lfs.github.com/)
 
 ### Docker Deployment
 
 - Docker Engine 20.10+
 - Docker Compose 1.29+
+- **Git LFS** (for pulling trained ML models)
 - At least 4GB free RAM (for ML model loading)
 - At least 6GB free disk space
 
@@ -88,6 +90,18 @@ sinXdetect/
 git clone https://github.com/yourusername/sinXdetect.git
 cd sinXdetect
 ```
+
+> ⚠️ **Important**: The trained ML models are stored using **Git LFS** (Large File Storage). To pull the models, you need to install Git LFS first:
+>
+> ```bash
+> # Install Git LFS (one-time setup)
+> git lfs install
+>
+> # Pull the model files
+> git lfs pull
+> ```
+>
+> Without Git LFS, the model files will be placeholder pointers and the application won't work.
 
 #### 2. Backend Setup
 
