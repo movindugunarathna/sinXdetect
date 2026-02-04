@@ -22,7 +22,21 @@ jobs:
             cd /sinxdetect
             git fetch --all
             git reset --hard origin/main
+
+            # Stop all sinxdetect containers (all compose files)
             docker compose -f docker-compose.prod.yml down --remove-orphans || true
-            docker compose -f docker-compose.prod.yml pull || true
+            docker compose -f docker-compose.yml down --remove-orphans || true
+            docker compose down --remove-orphans || true
+
+            # Stop any container using port 80
+            docker ps -q --filter "publish=80" | xargs -r docker stop || true
+
+            # Kill any process using port 80 (nginx, apache, etc.)
+            fuser -k 80/tcp || true
+
+            # Small delay to ensure port is released
+            sleep 2
+
+            # Build and start production containers
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
             docker image prune -f
