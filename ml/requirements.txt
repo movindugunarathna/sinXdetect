@@ -1,11 +1,28 @@
+# sinXdetect ML Requirements
+# ================================
+# Note: Package versions are pinned for TensorFlow/Keras/Transformers compatibility
+
+# Data processing
 pandas
+numpy>=1.24.0,<2.0.0
+
+# Machine learning
 scikit-learn
 joblib
+
+# Web framework (for testing)
 fastapi
 uvicorn[standard]
-# Optional (transformer fine-tuning):
-transformers
+
+# TensorFlow and Keras (pinned for compatibility)
+tensorflow>=2.15.0,<2.16.0
+tf-keras>=2.15.0,<2.16.0
+
+# Transformers (pinned for TensorFlow model compatibility)
+transformers>=4.36.0,<4.37.0
+tokenizers>=0.15.0,<0.16.0
 datasets
-torch
 sentencepiece
-tensorflow
+
+# PyTorch (optional, for PyTorch-based models)
+# torch

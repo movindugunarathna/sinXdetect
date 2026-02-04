@@ -343,6 +343,35 @@ services:
 
 ## 🔧 Troubleshooting
 
+### Dependency Issues
+
+**TensorFlow/Keras compatibility errors:**
+
+If you see errors like `module 'tensorflow' has no attribute 'get_logger'` or `ModuleNotFoundError: No module named 'tensorflow.compat'`:
+
+```bash
+# Install compatible versions (pinned for this project)
+pip install tensorflow==2.15.0 tf-keras==2.15.0 transformers==4.36.0 tokenizers==0.15.0
+```
+
+**Tokenizer loading errors:**
+
+If you see `data did not match any variant of untagged enum ModelWrapper`:
+
+- This is a tokenizers library version mismatch
+- The `classify_text.py` uses `use_fast=False` to work around this
+- Ensure you have `tokenizers>=0.15.0,<0.16.0` installed
+
+**Required package versions for compatibility:**
+
+| Package      | Version Range        |
+| ------------ | -------------------- |
+| tensorflow   | >=2.15.0,<2.16.0     |
+| tf-keras     | >=2.15.0,<2.16.0     |
+| transformers | >=4.36.0,<4.37.0     |
+| tokenizers   | >=0.15.0,<0.16.0     |
+| numpy        | >=1.24.0,<2.0.0      |
+
 ### Backend Issues
 
 **Model not loading:**
@@ -363,10 +392,21 @@ ports:
 
 ### Frontend Issues
 
-**API connection error:**
+**API connection error (CORS or ERR_CONNECTION_REFUSED):**
 
 - Ensure backend is running on port 8000
-- Check `VITE_API_URL` in `.env` file
+- Check `VITE_API_URL` in `frontend/.env` file
+- **Important**: The URL must include the protocol (`http://` or `https://`)
+
+```bash
+# Correct format for local development
+VITE_API_URL=http://localhost:8000
+
+# Incorrect (will cause malformed URLs)
+VITE_API_URL=localhost:8000
+```
+
+- After changing `.env`, restart the frontend dev server (Vite)
 
 **Build failures:**
 
