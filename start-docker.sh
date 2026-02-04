@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Docker startup script for sinXdetect application
+# Uses the unified multi-stage Dockerfile
 
 set -e
 
@@ -21,11 +22,11 @@ if [ "$MODE" = "dev" ] || [ "$MODE" = "development" ]; then
     echo "   - Backend with hot-reload on http://localhost:8000"
     echo "   - Frontend with hot-reload on http://localhost:5173"
     echo ""
-    docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+    docker compose -f docker-compose.dev.yml up --build
 else
     echo "📦 Building and starting in PRODUCTION mode..."
-    echo "   - Backend API on http://localhost:8000"
-    echo "   - Frontend on http://localhost:3000"
+    echo "   - Using unified Dockerfile (frontend + backend combined)"
+    echo "   - Application available on http://localhost:3000"
     echo ""
     docker compose up --build -d
     
@@ -33,7 +34,9 @@ else
     echo "✅ Services started successfully!"
     echo ""
     echo "📊 View logs with: docker compose logs -f"
-    echo "🛑 Stop services with: docker compose down"
+    echo "🛑 Stop services with: ./stop-docker.sh"
     echo ""
     echo "🌐 Open the application at: http://localhost:3000"
+    echo ""
+    echo "⏳ Note: First startup may take 2-3 minutes for ML model loading."
 fi

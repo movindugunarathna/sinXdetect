@@ -1,13 +1,25 @@
+# filepath: c:\Users\movin\FYP\sinXdetect\docker-compose.dev.yml
 version: '3.8'
 
 # Development-specific docker-compose configuration
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# For development, we run backend and frontend separately for hot-reload support
 
 services:
+  # Override: Disable the combined service for dev mode
+  sinxdetect:
+    profiles:
+      - production-only
+
+  # Backend Service with hot-reload
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: sinxdetect-backend-dev
+    ports:
+      - '8000:8000'
     volumes:
       # Mount source code for hot-reload
       - ./backend:/app
@@ -18,16 +30,30 @@ services:
       - DEBUG=1
     command:
       ['uvicorn', 'app:app', '--host', '0.0.0.0', '--port', '8000', '--reload']
+    networks:
+      - sinxdetect-network
+    restart: unless-stopped
 
+  # Frontend Service with Vite dev server
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
+    container_name: sinxdetect-frontend-dev
+    ports:
+      - '5173:5173'
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:8000
-    ports:
-      - '5173:5173'
     command: ['npm', 'run', 'dev', '--', '--host']
+    depends_on:
+      - backend
+    networks:
+      - sinxdetect-network
+    restart: unless-stopped
+
+networks:
+  sinxdetect-network:
+    driver: bridge
