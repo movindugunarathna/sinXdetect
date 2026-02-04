@@ -1,5 +1,9 @@
 # Multi-stage Dockerfile for sinXdetect Application
-# This Dockerfile builds both frontend and backend for deployment to Digital Ocean
+# This Dockerfile builds both frontend and backend for deployment
+#
+# Environment Configuration:
+#   - Development: VITE_API_URL=http://localhost:3000/api (default for docker-compose.yml)
+#   - Production:  VITE_API_URL=https://api.sinxdetect.movindu.com (docker-compose.prod.yml)
 
 # ============================================
 # Stage 1: Build Frontend
@@ -17,9 +21,12 @@ RUN npm install
 # Copy frontend source code
 COPY frontend/ .
 
-# Build argument for API URL (can be overridden at build time)
+# Build arguments for environment configuration
+# Default to production URL, override via docker-compose args
 ARG VITE_API_URL=https://api.sinxdetect.movindu.com
+ARG NODE_ENV=production
 ENV VITE_API_URL=${VITE_API_URL}
+ENV NODE_ENV=${NODE_ENV}
 
 # Build the frontend application
 RUN npm run build

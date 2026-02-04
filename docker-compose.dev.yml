@@ -5,6 +5,10 @@
 #   docker compose -f docker-compose.dev.yml up --build --remove-orphans
 #   docker compose -f docker-compose.dev.yml down --remove-orphans
 #
+# Development URLs (local with hot-reload):
+#   - Frontend: http://localhost:5173
+#   - Backend API: http://localhost:8000
+#
 # For development, we run backend and frontend separately for hot-reload support
 
 services:

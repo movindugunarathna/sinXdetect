@@ -124,7 +124,7 @@ cd frontend
 # Install dependencies
 npm install
 
-# Create environment file
+# Create environment file (for development)
 echo "VITE_API_URL=http://localhost:8000" > .env
 
 # Start development server
@@ -137,64 +137,82 @@ The frontend will be available at: `http://localhost:5173`
 
 The project uses a **unified multi-stage Dockerfile** that combines both frontend and backend into a single container for production deployment. This simplifies deployment and ensures consistency.
 
+#### Environment Overview
+
+| Environment     | Command                   | Frontend URL                   | Backend API URL                    |
+| --------------- | ------------------------- | ------------------------------ | ---------------------------------- |
+| **Development** | `./start-docker.sh dev`   | http://localhost:5173          | http://localhost:8000              |
+| **Local**       | `./start-docker.sh local` | http://localhost:3000          | http://localhost:3000/api          |
+| **Production**  | `./start-docker.sh prod`  | https://sinxdetect.movindu.com | https://api.sinxdetect.movindu.com |
+
 #### Architecture
 
-- **Production Mode**: Single container running nginx (serves frontend) + uvicorn (backend API) managed by supervisord
 - **Development Mode**: Separate containers for backend and frontend with hot-reload support
+- **Local Mode**: Single container for local testing (port 3000)
+- **Production Mode**: Optimized single container for deployment (port 80)
 
-#### Quick Start (Production Mode)
+#### Quick Start
 
-**Linux/Mac/Git Bash (Windows):**
+**Development with Hot-Reload (Recommended for coding):**
 
 ```bash
-chmod +x start-docker.sh stop-docker.sh
-./start-docker.sh
+# Linux/Mac/Git Bash
+./start-docker.sh dev
+
+# Windows Command Prompt
+start-docker.bat dev
 ```
 
-**Windows Command Prompt/PowerShell:**
+**Local Testing (Combined container):**
 
-```cmd
-start-docker.bat
+```bash
+# Linux/Mac/Git Bash
+./start-docker.sh local
+
+# Windows Command Prompt
+start-docker.bat local
+```
+
+**Production Deployment:**
+
+```bash
+# Linux/Mac/Git Bash
+./start-docker.sh prod
+
+# Windows Command Prompt
+start-docker.bat prod
 ```
 
 > 💡 **Windows Users**: If using Git Bash, use the `.sh` scripts. The `.bat` files only work in Command Prompt or PowerShell.
 
-This will:
-
-- Build a unified container using the multi-stage `Dockerfile`
-- Start the application on `http://localhost:3000`
-- Frontend and backend API are served from the same container
-- ML models are bundled into the container
-
-Access the application at: **http://localhost:3000**
-
 > ⏳ **Note**: First startup may take 2-3 minutes while the ML model loads into memory.
 
-#### Development Mode with Hot-Reload
-
-For active development, use separate containers with hot-reload:
-
-**Linux/Mac/Git Bash (Windows):**
+#### Stopping Services
 
 ```bash
-./start-docker.sh dev
+# Stop all services
+./stop-docker.sh
+
+# Stop specific environment
+./stop-docker.sh dev
+./stop-docker.sh prod
+
+# Stop and remove volumes
+./stop-docker.sh clean
 ```
-
-**Windows Command Prompt/PowerShell:**
-
-```cmd
-start-docker.bat dev
-```
-
-This enables:
-
-- Backend hot-reload (FastAPI auto-reload) on `http://localhost:8000`
-- Frontend hot-reload (Vite HMR) on `http://localhost:5173`
-- Source code mounted as volumes for instant changes
 
 #### Manual Docker Commands
 
 ```bash
+# Development mode
+docker compose -f docker-compose.dev.yml up --build --remove-orphans
+
+# Local testing mode
+docker compose up --build -d --remove-orphans
+
+# Production mode
+docker compose -f docker-compose.prod.yml up --build -d --remove-orphans
+
 # Build the unified container
 docker compose build
 
@@ -301,21 +319,38 @@ curl -X POST "http://localhost:8000/explain" \
 **Frontend:**
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VITE_API_URL` | Backend API URL | `http://localhost:8000` |
+| `VITE_API_URL` | Backend API URL | Environment-specific (see below) |
+
+**Environment-specific API URLs:**
+| Environment | VITE_API_URL |
+|-------------|--------------|
+| Development | `http://localhost:8000` |
+| Local | `http://localhost:3000/api` |
+| Production | `https://api.sinxdetect.movindu.com` |
 
 ### Docker Configuration
 
-Edit `docker-compose.yml` for custom settings:
+Each environment has its own docker-compose file:
+
+- `docker-compose.dev.yml` - Development with hot-reload
+- `docker-compose.yml` - Local testing
+- `docker-compose.prod.yml` - Production deployment
+
+**Production URLs:**
+
+- Frontend: `https://sinxdetect.movindu.com`
+- Backend API: `https://api.sinxdetect.movindu.com`
+
+Example customization in `docker-compose.yml`:
 
 ```yaml
 services:
-  backend:
+  sinxdetect:
     environment:
       - MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
-  frontend:
     build:
       args:
-        - VITE_API_URL=http://your-api-url:8000
+        - VITE_API_URL=http://localhost:3000/api
 ```
 
 ## 🔧 Troubleshooting

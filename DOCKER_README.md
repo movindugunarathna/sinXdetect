@@ -7,8 +7,16 @@ This document explains how to run the sinXdetect application using Docker contai
 The application consists of three main components:
 
 1. **Backend**: FastAPI application serving the ML classification API (Port 8000)
-2. **Frontend**: React + Vite application served by Nginx (Port 3000)
+2. **Frontend**: React + Vite application served by Nginx (Port 3000/80)
 3. **ML Models**: Pre-trained models stored in the `ml/models` directory
+
+## Environment Overview
+
+| Environment     | Compose File              | Frontend URL                   | Backend API URL                    |
+| --------------- | ------------------------- | ------------------------------ | ---------------------------------- |
+| **Development** | `docker-compose.dev.yml`  | http://localhost:5173          | http://localhost:8000              |
+| **Local**       | `docker-compose.yml`      | http://localhost:3000          | http://localhost:3000/api          |
+| **Production**  | `docker-compose.prod.yml` | https://sinxdetect.movindu.com | https://api.sinxdetect.movindu.com |
 
 ## Prerequisites
 
@@ -19,28 +27,33 @@ The application consists of three main components:
 
 ## Quick Start
 
-### Production Mode
-
-Run the entire application stack:
+### Using Start Scripts (Recommended)
 
 ```bash
-docker-compose up -d
+# Development mode (with hot-reload)
+./start-docker.sh dev
+
+# Local testing (combined container on port 3000)
+./start-docker.sh local
+
+# Production deployment
+./start-docker.sh prod
 ```
 
-This will:
+On Windows:
 
-- Build and start the backend service on `http://localhost:8000`
-- Build and start the frontend service on `http://localhost:3000`
-- Mount ML models as read-only volumes
-
-Access the application at: **http://localhost:3000**
+```cmd
+start-docker.bat dev
+start-docker.bat local
+start-docker.bat prod
+```
 
 ### Development Mode
 
 For development with hot-reload:
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up --build --remove-orphans
 ```
 
 This will:
@@ -49,6 +62,35 @@ This will:
 - Enable hot-reload for frontend (Vite HMR)
 - Frontend dev server on `http://localhost:5173`
 - Backend API on `http://localhost:8000`
+
+### Local Testing Mode
+
+Test the combined production-like container locally:
+
+```bash
+docker compose up --build -d --remove-orphans
+```
+
+This will:
+
+- Build the combined frontend + backend container
+- Application available at `http://localhost:3000`
+- API accessible at `http://localhost:3000/api/`
+
+### Production Mode
+
+Deploy to production:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d --remove-orphans
+```
+
+This will:
+
+- Build optimized production container
+- Frontend URL: `https://sinxdetect.movindu.com`
+- Backend API: `https://api.sinxdetect.movindu.com`
+- Container exposes port 80
 
 ## Available Commands
 
@@ -80,10 +122,34 @@ docker-compose up backend
 
 ```bash
 # Stop all services
-docker-compose down
+./stop-docker.sh
+
+# Stop specific environment
+./stop-docker.sh dev
+./stop-docker.sh local
+./stop-docker.sh prod
 
 # Stop and remove volumes
-docker-compose down -v
+./stop-docker.sh clean
+```
+
+On Windows:
+
+```cmd
+stop-docker.bat
+stop-docker.bat dev
+stop-docker.bat prod
+stop-docker.bat clean
+```
+
+Or using docker compose directly:
+
+```bash
+# Stop all services
+docker compose down
+
+# Stop and remove volumes
+docker compose down -v
 ```
 
 ### View Logs
@@ -115,26 +181,47 @@ docker-compose exec backend python -c "print('Hello')"
 
 ## Configuration
 
+### Environment-specific API URLs
+
+The frontend connects to different API URLs based on the environment:
+
+| Environment | VITE_API_URL                         |
+| ----------- | ------------------------------------ |
+| Development | `http://localhost:8000`              |
+| Local       | `http://localhost:3000/api`          |
+| Production  | `https://api.sinxdetect.movindu.com` |
+
 ### Backend Environment Variables
 
-Edit `docker-compose.yml` to configure:
+Edit the appropriate `docker-compose*.yml` to configure:
 
 - `MODEL_PATH`: Path to the ML model directory
 - `PYTHONUNBUFFERED`: Set to 1 for immediate stdout/stderr
+- `UVICORN_WORKERS`: Number of worker processes (1 for dev, 2+ for prod)
 
 ### Frontend Environment Variables
 
-To change the API URL, modify the build args in `docker-compose.yml`:
+The API URL is set at build time via the `VITE_API_URL` build argument:
+
+**Development** (`docker-compose.dev.yml`):
+
+```yaml
+environment:
+  - VITE_API_URL=http://localhost:8000
+```
+
+**Local** (`docker-compose.yml`):
 
 ```yaml
 args:
-  - VITE_API_URL=http://your-api-url:8000
+  - VITE_API_URL=http://localhost:3000/api
 ```
 
-Or create a `.env` file in the frontend directory:
+**Production** (`docker-compose.prod.yml`):
 
-```
-VITE_API_URL=http://localhost:8000
+```yaml
+args:
+  - VITE_API_URL=https://api.sinxdetect.movindu.com
 ```
 
 ## Volumes
@@ -203,29 +290,48 @@ ml/models/
 
 ## Production Deployment
 
-For production deployment:
+For production deployment on Digital Ocean or similar:
 
-1. Remove development volume mounts from `docker-compose.yml`
-2. Set proper CORS origins in backend `app.py`
-3. Use environment-specific `.env` files
-4. Enable HTTPS with a reverse proxy (nginx/traefik)
-5. Consider using Docker Swarm or Kubernetes for orchestration
+### Production URLs
 
-### Example Production docker-compose.yml
+- **Frontend**: https://sinxdetect.movindu.com
+- **Backend API**: https://api.sinxdetect.movindu.com
 
-```yaml
-services:
-  backend:
-    image: sinxdetect-backend:latest
-    volumes:
-      - ./ml/models:/app/ml/models:ro
-    environment:
-      - MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
-    restart: always
+### Deployment Steps
 
-  frontend:
-    image: sinxdetect-frontend:latest
-    restart: always
+1. Deploy using the production compose file:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+2. Configure your reverse proxy/load balancer to:
+
+   - Route `sinxdetect.movindu.com` to port 80 (frontend)
+   - Route `api.sinxdetect.movindu.com` to port 80 (backend via nginx proxy)
+
+3. Set up SSL certificates (e.g., using Certbot/Let's Encrypt)
+
+### Docker Compose Files Summary
+
+| File                      | Purpose            | Use Case                           |
+| ------------------------- | ------------------ | ---------------------------------- |
+| `docker-compose.yml`      | Base/Local testing | Testing combined container locally |
+| `docker-compose.dev.yml`  | Development        | Hot-reload, separate containers    |
+| `docker-compose.prod.yml` | Production         | Optimized for deployment           |
+
+### Example Production Deployment
+
+```bash
+# On your production server
+git pull origin main
+./start-docker.sh prod
+
+# View logs
+docker compose -f docker-compose.prod.yml logs -f
+
+# Stop production
+./stop-docker.sh prod
 ```
 
 ## Resource Requirements

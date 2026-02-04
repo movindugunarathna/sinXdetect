@@ -1,16 +1,13 @@
-# filepath: c:\Users\movin\FYP\sinXdetect\docker-compose.yml
-# SinXdetect Base Docker Compose (Development - Local Testing)
+# filepath: c:\Users\movin\FYP\sinXdetect\docker-compose.prod.yml
+# SinXdetect Production Docker Compose
 #
 # Usage:
-#   docker compose up --build -d --remove-orphans
-#   docker compose down --remove-orphans
+#   docker compose -f docker-compose.prod.yml up --build -d --remove-orphans
+#   docker compose -f docker-compose.prod.yml down --remove-orphans
 #
-# Development URLs (local):
-#   - Application: http://localhost:3000
-#   - API via nginx: http://localhost:3000/api/
-#
-# For production deployment, use: docker-compose.prod.yml
-# For development with hot-reload, use: docker-compose.dev.yml
+# Production URLs:
+#   - Frontend: https://sinxdetect.movindu.com
+#   - Backend API: https://api.sinxdetect.movindu.com
 
 services:
   # Combined sinXdetect Application (Frontend + Backend)
@@ -20,16 +17,16 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=http://localhost:3000/api
-        - NODE_ENV=development
-    container_name: sinxdetect-app
+        - VITE_API_URL=https://api.sinxdetect.movindu.com
+        - NODE_ENV=production
+    container_name: sinxdetect-app-prod
     ports:
-      - '3000:80'
+      - '80:80'
     environment:
       - MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
       - PYTHONUNBUFFERED=1
-      - UVICORN_WORKERS=1
-      - NODE_ENV=development
+      - UVICORN_WORKERS=2
+      - NODE_ENV=production
     networks:
       - sinxdetect-network
     restart: unless-stopped
