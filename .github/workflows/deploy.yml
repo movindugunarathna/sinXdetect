@@ -30,13 +30,41 @@ jobs:
 
             # Stop any container using port 80
             docker ps -q --filter "publish=80" | xargs -r docker stop || true
+            docker ps -q --filter "publish=80" | xargs -r docker rm || true
 
             # Kill any process using port 80 (nginx, apache, etc.)
             fuser -k 80/tcp || true
 
+            # Stop and disable system nginx if running
+            systemctl stop nginx || true
+            systemctl disable nginx || true
+
             # Small delay to ensure port is released
-            sleep 2
+            sleep 3
 
             # Build and start production containers
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+
+            # Wait for container to start
+            sleep 10
+
+            # Show container status and logs for debugging
+            echo "=== Container Status ==="
+            docker ps -a
+            echo "=== Container Logs ==="
+            docker compose -f docker-compose.prod.yml logs --tail=50
+
+            # Check if container is running
+            if docker ps | grep -q sinxdetect-app-prod; then
+              echo "Container is running"
+            else
+              echo "Container failed to start"
+              docker compose -f docker-compose.prod.yml logs
+              exit 1
+            fi
+
+            # Ensure firewall allows port 80
+            ufw allow 80/tcp || true
+            ufw allow 443/tcp || true
+
             docker image prune -f
