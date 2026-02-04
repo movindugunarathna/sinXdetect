@@ -1,27 +1,31 @@
+#!/bin/bash
+# Docker entrypoint script for sinXdetect
+# Configures nginx based on SSL certificate availability
+
+set -e
+
+SSL_CERT="/etc/letsencrypt/live/api.sinxdetect.movindu.com/fullchain.pem"
+SSL_KEY="/etc/letsencrypt/live/api.sinxdetect.movindu.com/privkey.pem"
+NGINX_CONF="/etc/nginx/conf.d/sinxdetect.conf"
+
+echo "Checking SSL certificate availability..."
+
+if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
+    echo "✅ SSL certificates found. Enabling HTTPS configuration."
+    # SSL certificates exist, use the full config with HTTPS
+    # The nginx.conf already has SSL configuration, so we're good
+else
+    echo "⚠️  SSL certificates not found. Using HTTP-only configuration."
+    # Create HTTP-only nginx config
+    cat > "$NGINX_CONF" << 'NGINX_HTTP_ONLY'
+# HTTP-only configuration (SSL certificates not available)
+
 # Frontend server - sinxdetect.movindu.com
-# HTTP - Redirect to HTTPS
 server {
     listen 80;
     server_name sinxdetect.movindu.com;
-    return 301 https://$server_name$request_uri;
-}
-
-# HTTPS
-server {
-    listen 443 ssl http2;
-    server_name sinxdetect.movindu.com;
     root /usr/share/nginx/html;
     index index.html;
-
-    # SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/api.sinxdetect.movindu.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.sinxdetect.movindu.com/privkey.pem;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:50m;
-    ssl_session_tickets off;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
 
     # Gzip compression
     gzip on;
@@ -44,31 +48,12 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 }
 
 # API server - api.sinxdetect.movindu.com
-# HTTP - Redirect to HTTPS
 server {
     listen 80;
     server_name api.sinxdetect.movindu.com;
-    return 301 https://$server_name$request_uri;
-}
-
-# HTTPS
-server {
-    listen 443 ssl http2;
-    server_name api.sinxdetect.movindu.com;
-
-    # SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/api.sinxdetect.movindu.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.sinxdetect.movindu.com/privkey.pem;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:50m;
-    ssl_session_tickets off;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
 
     # Gzip compression
     gzip on;
@@ -91,14 +76,14 @@ server {
         proxy_connect_timeout 75s;
         
         # CORS headers for API
-        add_header Access-Control-Allow-Origin "https://sinxdetect.movindu.com" always;
+        add_header Access-Control-Allow-Origin "*" always;
         add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
         add_header Access-Control-Allow-Credentials "true" always;
         
         # Handle preflight requests
         if ($request_method = 'OPTIONS') {
-            add_header Access-Control-Allow-Origin "https://sinxdetect.movindu.com" always;
+            add_header Access-Control-Allow-Origin "*" always;
             add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
             add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
             add_header Access-Control-Allow-Credentials "true" always;
@@ -106,11 +91,12 @@ server {
             add_header Content-Type text/plain;
             return 204;
         }
-    }    # Security headers
+    }
+
+    # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 }
 
 # Default server for localhost/IP access (optional fallback)
@@ -152,3 +138,13 @@ server {
         add_header Cache-Control "public, immutable";
     }
 }
+NGINX_HTTP_ONLY
+fi
+
+# Test nginx configuration
+echo "Testing nginx configuration..."
+nginx -t
+
+# Start supervisord
+echo "Starting supervisord..."
+exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf

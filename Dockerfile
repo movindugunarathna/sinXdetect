@@ -77,8 +77,12 @@ COPY nginx.conf /etc/nginx/conf.d/sinxdetect.conf
 # Copy supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/sinxdetect.conf
 
-# Expose port 80 (nginx serves both frontend and proxies to backend)
-EXPOSE 80
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Expose ports 80 and 443 (nginx serves both frontend and proxies to backend)
+EXPOSE 80 443
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -90,5 +94,5 @@ ENV PYTHONPATH=/app:/app/backend
 HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=5 \
     CMD wget --quiet --tries=1 --spider http://localhost:80/ || exit 1
 
-# Start supervisor which manages both nginx and backend
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
+# Start with entrypoint script that configures nginx based on SSL availability
+ENTRYPOINT ["/docker-entrypoint.sh"]
