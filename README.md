@@ -153,16 +153,14 @@ The project uses a **unified multi-stage Dockerfile** that combines both fronten
 
 #### Environment Overview
 
-| Environment     | Command                   | Frontend URL                   | Backend API URL                    |
-| --------------- | ------------------------- | ------------------------------ | ---------------------------------- |
-| **Development** | `./start-docker.sh dev`   | http://localhost:5173          | http://localhost:8000              |
-| **Local**       | `./start-docker.sh local` | http://localhost:3000          | http://localhost:3000/api          |
-| **Production**  | `./start-docker.sh prod`  | https://sinxdetect.movindu.com | https://api.sinxdetect.movindu.com |
+| Environment     | Command                  | Frontend URL                   | Backend API URL                    |
+| --------------- | ------------------------ | ------------------------------ | ---------------------------------- |
+| **Development** | `./start-docker.sh dev`  | http://localhost:5173          | http://localhost:8000              |
+| **Production**  | `./start-docker.sh prod` | https://sinxdetect.movindu.com | https://api.sinxdetect.movindu.com |
 
 #### Architecture
 
 - **Development Mode**: Separate containers for backend and frontend with hot-reload support
-- **Local Mode**: Single container for local testing (port 3000)
 - **Production Mode**: Optimized single container for deployment (port 80)
 
 #### Quick Start
@@ -175,16 +173,6 @@ The project uses a **unified multi-stage Dockerfile** that combines both fronten
 
 # Windows Command Prompt
 start-docker.bat dev
-```
-
-**Local Testing (Combined container):**
-
-```bash
-# Linux/Mac/Git Bash
-./start-docker.sh local
-
-# Windows Command Prompt
-start-docker.bat local
 ```
 
 **Production Deployment:**
@@ -221,20 +209,8 @@ start-docker.bat prod
 # Development mode
 docker compose -f docker-compose.dev.yml up --build --remove-orphans
 
-# Local testing mode
-docker compose up --build -d --remove-orphans
-
 # Production mode
 docker compose -f docker-compose.prod.yml up --build -d --remove-orphans
-
-# Build the unified container
-docker compose build
-
-# Start in foreground (see logs)
-docker compose up
-
-# Start in background (detached)
-docker compose up -d
 
 # View logs
 docker compose logs -f
@@ -339,7 +315,6 @@ curl -X POST "http://localhost:8000/explain" \
 | Environment | VITE_API_URL |
 |-------------|--------------|
 | Development | `http://localhost:8000` |
-| Local | `http://localhost:3000/api` |
 | Production | `https://api.sinxdetect.movindu.com` |
 
 ### Docker Configuration
@@ -347,7 +322,6 @@ curl -X POST "http://localhost:8000/explain" \
 Each environment has its own docker-compose file:
 
 - `docker-compose.dev.yml` - Development with hot-reload
-- `docker-compose.yml` - Local testing
 - `docker-compose.prod.yml` - Production deployment
 
 **Production URLs:**
@@ -355,7 +329,7 @@ Each environment has its own docker-compose file:
 - Frontend: `https://sinxdetect.movindu.com`
 - Backend API: `https://api.sinxdetect.movindu.com`
 
-Example customization in `docker-compose.yml`:
+Example customization in `docker-compose.prod.yml`:
 
 ```yaml
 services:
@@ -364,7 +338,7 @@ services:
       - MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
     build:
       args:
-        - VITE_API_URL=http://localhost:3000/api
+        - VITE_API_URL=https://api.sinxdetect.movindu.com
 ```
 
 ## 🔧 Troubleshooting
