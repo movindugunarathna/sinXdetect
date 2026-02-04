@@ -75,22 +75,7 @@ server {
         proxy_read_timeout 300s;
         proxy_connect_timeout 75s;
         
-        # CORS headers for API
-        add_header Access-Control-Allow-Origin "*" always;
-        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
-        add_header Access-Control-Allow-Credentials "true" always;
-        
-        # Handle preflight requests
-        if ($request_method = 'OPTIONS') {
-            add_header Access-Control-Allow-Origin "*" always;
-            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-            add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
-            add_header Access-Control-Allow-Credentials "true" always;
-            add_header Content-Length 0;
-            add_header Content-Type text/plain;
-            return 204;
-        }
+        # CORS is handled by FastAPI backend - don't add headers here to avoid duplicates
     }
 
     # Security headers
