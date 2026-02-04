@@ -40,17 +40,27 @@ jobs:
 
             # Stop and disable system nginx if running
             systemctl stop nginx || true
-            systemctl disable nginx || true
-
-            # Install certbot if not present
+            systemctl disable nginx || true            # Install certbot if not present
             if ! command -v certbot &> /dev/null; then
               apt-get update
               apt-get install -y certbot
             fi
 
-            # Check if SSL certificates exist, if not, obtain them
-            if [ ! -f /etc/letsencrypt/live/sinxdetect.movindu.com/fullchain.pem ]; then
-              echo "Obtaining SSL certificates..."
+            # Check if SSL certificates exist and include api subdomain
+            CERT_FILE="/etc/letsencrypt/live/sinxdetect.movindu.com/fullchain.pem"
+            NEED_CERT=false
+
+            if [ ! -f "$CERT_FILE" ]; then
+              NEED_CERT=true
+              echo "No certificate found, will obtain new one..."
+            elif ! openssl x509 -in "$CERT_FILE" -text -noout 2>/dev/null | grep -q "api.sinxdetect.movindu.com"; then
+              NEED_CERT=true
+              echo "Certificate doesn't include api subdomain, will renew..."
+              certbot delete --cert-name sinxdetect.movindu.com --non-interactive || true
+            fi
+
+            if [ "$NEED_CERT" = true ]; then
+              echo "Obtaining SSL certificates for both domains..."
               certbot certonly --standalone \
                 -d sinxdetect.movindu.com \
                 -d api.sinxdetect.movindu.com \
