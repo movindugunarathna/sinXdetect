@@ -87,7 +87,7 @@ sinXdetect/
 #### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/sinXdetect.git
+git clone https://github.com/movindugunarathna/sinXdetect.git
 cd sinXdetect
 ```
 
