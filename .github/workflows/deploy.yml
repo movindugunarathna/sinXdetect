@@ -28,18 +28,39 @@ jobs:
             docker compose -f docker-compose.yml down --remove-orphans || true
             docker compose down --remove-orphans || true
 
-            # Stop any container using port 80
+            # Stop any container using port 80 or 443
             docker ps -q --filter "publish=80" | xargs -r docker stop || true
             docker ps -q --filter "publish=80" | xargs -r docker rm || true
+            docker ps -q --filter "publish=443" | xargs -r docker stop || true
+            docker ps -q --filter "publish=443" | xargs -r docker rm || true
 
-            # Kill any process using port 80 (nginx, apache, etc.)
+            # Kill any process using port 80 or 443 (nginx, apache, etc.)
             fuser -k 80/tcp || true
+            fuser -k 443/tcp || true
 
             # Stop and disable system nginx if running
             systemctl stop nginx || true
             systemctl disable nginx || true
 
-            # Small delay to ensure port is released
+            # Install certbot if not present
+            if ! command -v certbot &> /dev/null; then
+              apt-get update
+              apt-get install -y certbot
+            fi
+
+            # Check if SSL certificates exist, if not, obtain them
+            if [ ! -f /etc/letsencrypt/live/sinxdetect.movindu.com/fullchain.pem ]; then
+              echo "Obtaining SSL certificates..."
+              certbot certonly --standalone \
+                -d sinxdetect.movindu.com \
+                -d api.sinxdetect.movindu.com \
+                --non-interactive \
+                --agree-tos \
+                --email movindusen@gmail.com \
+                || echo "Warning: Could not obtain SSL certificates. HTTPS may not work."
+            fi
+
+            # Small delay to ensure ports are released
             sleep 3
 
             # Build and start production containers
@@ -63,7 +84,7 @@ jobs:
               exit 1
             fi
 
-            # Ensure firewall allows port 80
+            # Ensure firewall allows ports 80 and 443
             ufw allow 80/tcp || true
             ufw allow 443/tcp || true
 
