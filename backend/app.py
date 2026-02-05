@@ -11,11 +11,12 @@ from pydantic import BaseModel
 import numpy as np
 import tensorflow as tf
 
+from lime.lime_text import LimeTextExplainer
+
 try:
     from classify_text import SinhalaTextClassifier
 except ImportError:
     from backend.classify_text import SinhalaTextClassifier
-from lime.lime_text import LimeTextExplainer
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "sinbert_sinhala_classifier"
@@ -37,7 +38,7 @@ app = FastAPI(
     description="API for classifying Sinhala text as human- or AI-generated using SinBERT model with LIME explanations",
 )
 
-# Add CORS middleware to allow frontend requests
+# CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
