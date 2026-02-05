@@ -1,4 +1,4 @@
-# SinXdetect - Sinhala Human vs AI Text Classifier
+# SinXdetect - Sinhala Human vs AI Text Classifier by Movindu Gunarathna | w1871486 / 20212033
 
 🌐 **Live Demo**: [https://sinxdetect.movindu.com/](https://sinxdetect.movindu.com/)
 
@@ -452,6 +452,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Created by**: Movindu Gunarathna
+**Created by**: Movindu Gunarathna | w1871486 / 20212033
 **Project**: Final Year Project (FYP)  
 **Version**: 2.0.0
