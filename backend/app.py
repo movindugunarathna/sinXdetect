@@ -11,6 +11,13 @@ from pydantic import BaseModel
 import numpy as np
 import tensorflow as tf
 
+# Fix for TensorFlow version attribute issue with transformers
+# Some TensorFlow installations have version info at different locations
+if not hasattr(tf, 'version'):
+    class TFVersion:
+        VERSION = tf.__version__
+    tf.version = TFVersion()
+
 from lime.lime_text import LimeTextExplainer
 
 try:
