@@ -364,13 +364,13 @@ If you see `data did not match any variant of untagged enum ModelWrapper`:
 
 **Required package versions for compatibility:**
 
-| Package      | Version Range        |
-| ------------ | -------------------- |
-| tensorflow   | >=2.15.0,<2.16.0     |
-| tf-keras     | >=2.15.0,<2.16.0     |
-| transformers | >=4.36.0,<4.37.0     |
-| tokenizers   | >=0.15.0,<0.16.0     |
-| numpy        | >=1.24.0,<2.0.0      |
+| Package      | Version Range    |
+| ------------ | ---------------- |
+| tensorflow   | >=2.15.0,<2.16.0 |
+| tf-keras     | >=2.15.0,<2.16.0 |
+| transformers | >=4.36.0,<4.37.0 |
+| tokenizers   | >=0.15.0,<0.16.0 |
+| numpy        | >=1.24.0,<2.0.0  |
 
 ### Backend Issues
 
@@ -452,6 +452,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Created by**: Movindu Gunarathna
+**Created by**: Movindu Gunarathna | w1871486 | 20212033
 **Project**: Final Year Project (FYP)  
 **Version**: 2.0.0
