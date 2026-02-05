@@ -19,6 +19,14 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['TF_USE_LEGACY_KERAS'] = '1'
 
 import tensorflow as tf
+
+# Fix for TensorFlow version attribute issue with transformers
+# Some TensorFlow installations have version info at different locations
+if not hasattr(tf, 'version'):
+    class TFVersion:
+        VERSION = tf.__version__
+    tf.version = TFVersion()
+
 # Suppress TensorFlow logging (compatible with TF 2.16+)
 import logging
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
