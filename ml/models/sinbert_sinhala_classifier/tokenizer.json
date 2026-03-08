@@ -23,7 +23,7 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": true,
+      "normalized": false,
       "special": true
     },
     {
@@ -32,7 +32,7 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": true,
+      "normalized": false,
       "special": true
     },
     {
@@ -41,7 +41,7 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": true,
+      "normalized": false,
       "special": true
     },
     {
@@ -50,14 +50,14 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": true,
+      "normalized": false,
       "special": true
     },
     {
       "id": 4,
       "content": "<mask>",
       "single_word": false,
-      "lstrip": true,
+      "lstrip": false,
       "rstrip": false,
       "normalized": false,
       "special": true
