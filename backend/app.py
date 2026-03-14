@@ -1,12 +1,15 @@
 import json
 import os
+import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 import re
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -30,6 +33,57 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "sinbert_sinhala_classifier"
 EVAL_DIR = REPO_ROOT / "ml" / "evaluations"
+DATA_DIR = REPO_ROOT / "data"
+FEEDBACK_DB = DATA_DIR / "feedback.db"
+
+# ---------------------------------------------------------------------------
+# SQLite feedback store
+# ---------------------------------------------------------------------------
+
+_FEEDBACK_SCHEMA = """
+CREATE TABLE IF NOT EXISTS classification_feedback (
+    id              TEXT PRIMARY KEY,
+    analysis_item_id TEXT,
+    model_version_id TEXT NOT NULL,
+    predicted_label TEXT NOT NULL,
+    corrected_label TEXT NOT NULL,
+    comment         TEXT,
+    text_hash       TEXT NOT NULL,
+    raw_text_encrypted TEXT,
+    user_name       TEXT,
+    user_email      TEXT,
+    status          TEXT NOT NULL DEFAULT 'NEW',
+    created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON classification_feedback(status);
+"""
+
+_FEEDBACK_MIGRATIONS = [
+    "ALTER TABLE classification_feedback ADD COLUMN user_name TEXT",
+    "ALTER TABLE classification_feedback ADD COLUMN user_email TEXT",
+]
+
+
+def _get_db() -> sqlite3.Connection:
+    """Return a connection to the feedback database, creating it if needed."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(FEEDBACK_DB))
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_FEEDBACK_SCHEMA)
+    for stmt in _FEEDBACK_MIGRATIONS:
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass  # column already exists
+    conn.commit()
+    return conn
+
+
+def _active_model_version_id() -> str:
+    """Return the id of the currently active model version."""
+    versions = _load_json(EVAL_DIR / "model_versions.json")
+    active = next((v for v in versions if v.get("is_active")), None)
+    return active["id"] if active else "unknown"
 
 
 def _resolve_model_path(raw_path: str) -> str:
@@ -135,6 +189,38 @@ class ExplanationResponse(BaseModel):
     error: Optional[str] = None
 
 
+# ==================== FEEDBACK MODELS ====================
+
+
+class FeedbackCreateRequest(BaseModel):
+    predicted_label: str
+    corrected_label: str
+    text_hash: str
+    analysis_item_id: Optional[str] = None
+    comment: Optional[str] = None
+    raw_text: Optional[str] = None
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+
+
+class FeedbackRecord(BaseModel):
+    id: str
+    analysis_item_id: Optional[str]
+    model_version_id: str
+    predicted_label: str
+    corrected_label: str
+    comment: Optional[str]
+    text_hash: str
+    user_name: Optional[str]
+    user_email: Optional[str]
+    status: str
+    created_at: str
+
+
+class FeedbackPatchRequest(BaseModel):
+    status: str  # APPROVED or REJECTED
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
@@ -151,6 +237,9 @@ async def root() -> dict:
             "/classify": "POST - Classify a single text as human or AI-generated",
             "/classify-batch": "POST - Classify multiple texts in batch",
             "/explain": "POST - Get LIME explanation for text classification with word highlighting",
+            "/feedback": "POST - Submit feedback on a wrong classification",
+            "/feedback?status=NEW": "GET - List feedback records (admin/reviewer)",
+            "/feedback/{id}": "PATCH - Approve or reject a feedback record",
             "/metrics/current": "GET - Latest evaluation metrics for the active model",
             "/metrics/history": "GET - All evaluation snapshots grouped by model version",
             "/health": "GET - Health check",
@@ -300,6 +389,142 @@ async def metrics_history() -> List[HistoryMetricsResponse]:
         results.append(HistoryMetricsResponse(model=model_info, evaluations=evals))
 
     return results
+
+
+# ==================== FEEDBACK ENDPOINTS ====================
+
+
+@app.post("/feedback", response_model=FeedbackRecord, status_code=201)
+async def submit_feedback(req: FeedbackCreateRequest) -> FeedbackRecord:
+    """Accept user feedback on a classification result and queue it for review."""
+    if req.corrected_label not in ("HUMAN", "AI"):
+        raise HTTPException(status_code=400, detail="corrected_label must be HUMAN or AI")
+    if req.predicted_label not in ("HUMAN", "AI"):
+        raise HTTPException(status_code=400, detail="predicted_label must be HUMAN or AI")
+
+    feedback_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    model_ver = _active_model_version_id()
+
+    raw_encrypted = None
+    if req.raw_text:
+        raw_encrypted = req.raw_text
+
+    conn = _get_db()
+    try:
+        conn.execute(
+            """INSERT INTO classification_feedback
+               (id, analysis_item_id, model_version_id, predicted_label,
+                corrected_label, comment, text_hash, raw_text_encrypted,
+                user_name, user_email, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NEW', ?)""",
+            (
+                feedback_id,
+                req.analysis_item_id,
+                model_ver,
+                req.predicted_label,
+                req.corrected_label,
+                req.comment,
+                req.text_hash,
+                raw_encrypted,
+                req.user_name,
+                req.user_email,
+                now,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return FeedbackRecord(
+        id=feedback_id,
+        analysis_item_id=req.analysis_item_id,
+        model_version_id=model_ver,
+        predicted_label=req.predicted_label,
+        corrected_label=req.corrected_label,
+        comment=req.comment,
+        text_hash=req.text_hash,
+        user_name=req.user_name,
+        user_email=req.user_email,
+        status="NEW",
+        created_at=now,
+    )
+
+
+@app.get("/feedback", response_model=List[FeedbackRecord])
+async def list_feedback(status: Optional[str] = Query(None)) -> List[FeedbackRecord]:
+    """List feedback records, optionally filtered by status (admin/reviewer)."""
+    conn = _get_db()
+    try:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM classification_feedback WHERE status = ? ORDER BY created_at DESC",
+                (status.upper(),),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM classification_feedback ORDER BY created_at DESC"
+            ).fetchall()
+    finally:
+        conn.close()
+
+    return [
+        FeedbackRecord(
+            id=r["id"],
+            analysis_item_id=r["analysis_item_id"],
+            model_version_id=r["model_version_id"],
+            predicted_label=r["predicted_label"],
+            corrected_label=r["corrected_label"],
+            comment=r["comment"],
+            text_hash=r["text_hash"],
+            user_name=r["user_name"],
+            user_email=r["user_email"],
+            status=r["status"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+
+
+@app.patch("/feedback/{feedback_id}", response_model=FeedbackRecord)
+async def update_feedback(feedback_id: str, req: FeedbackPatchRequest) -> FeedbackRecord:
+    """Approve or reject a feedback record (admin/reviewer)."""
+    if req.status not in ("APPROVED", "REJECTED"):
+        raise HTTPException(status_code=400, detail="status must be APPROVED or REJECTED")
+
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM classification_feedback WHERE id = ?", (feedback_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Feedback record not found")
+
+        conn.execute(
+            "UPDATE classification_feedback SET status = ? WHERE id = ?",
+            (req.status, feedback_id),
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT * FROM classification_feedback WHERE id = ?", (feedback_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    return FeedbackRecord(
+        id=row["id"],
+        analysis_item_id=row["analysis_item_id"],
+        model_version_id=row["model_version_id"],
+        predicted_label=row["predicted_label"],
+        corrected_label=row["corrected_label"],
+        comment=row["comment"],
+        text_hash=row["text_hash"],
+        user_name=row["user_name"],
+        user_email=row["user_email"],
+        status=row["status"],
+        created_at=row["created_at"],
+    )
 
 
 # ==================== LIME EXPLANATION FUNCTIONALITY ====================

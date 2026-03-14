@@ -1,2 +1,5 @@
 # Dataset files
 ml/dataset/
+
+# Feedback database (contains user-submitted text)
+data/feedback.db
