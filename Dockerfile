@@ -42,6 +42,7 @@ WORKDIR /app
 # Install system dependencies including nginx
 RUN apt-get update && apt-get install -y \
     build-essential \
+    curl \
     nginx \
     supervisor \
     wget \
