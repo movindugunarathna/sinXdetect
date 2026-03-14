@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import './App.css';
+import ModelPerformance from './ModelPerformance';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'https://api.sinxdetect.movindu.com';
 
@@ -100,6 +101,8 @@ function App() {
             explanations.
           </p>
         </header>
+
+        <ModelPerformance />
 
         <main className="glass-card rounded-2xl p-6 sm:p-8 space-y-5">
           <div className="flex flex-col gap-3">

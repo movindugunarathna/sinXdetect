@@ -1,0 +1,10 @@
+[
+  {
+    "id": "v1-sinbert-large",
+    "version_name": "SinBERT-large v1.0",
+    "model_path": "ml/models/sinbert_sinhala_classifier",
+    "base_model": "NLPC-UOM/SinBERT-large",
+    "is_active": true,
+    "created_at": "2025-01-15T00:00:00Z"
+  }
+]

@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -5,8 +6,9 @@ import re
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import numpy as np
 import tensorflow as tf
@@ -27,6 +29,7 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "sinbert_sinhala_classifier"
+EVAL_DIR = REPO_ROOT / "ml" / "evaluations"
 
 
 def _resolve_model_path(raw_path: str) -> str:
@@ -61,6 +64,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all so unhandled errors still get CORS headers via the middleware."""
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+    )
 
 _classifier: Optional[SinhalaTextClassifier] = None
 _executor = ThreadPoolExecutor(max_workers=2)  # Thread pool for LIME computations
@@ -140,6 +151,8 @@ async def root() -> dict:
             "/classify": "POST - Classify a single text as human or AI-generated",
             "/classify-batch": "POST - Classify multiple texts in batch",
             "/explain": "POST - Get LIME explanation for text classification with word highlighting",
+            "/metrics/current": "GET - Latest evaluation metrics for the active model",
+            "/metrics/history": "GET - All evaluation snapshots grouped by model version",
             "/health": "GET - Health check",
             "/docs": "GET - API documentation (Swagger UI)"
         },
@@ -185,6 +198,108 @@ async def classify_batch(request: BatchRequest) -> BatchPredictionResponse:
     for text, resp in zip(request.texts, responses):
         _log_single(text, resp)
     return BatchPredictionResponse(results=responses)
+
+
+# ==================== MODEL PERFORMANCE METRICS ====================
+
+
+def _load_json(path: Path) -> list:
+    if not path.exists():
+        return []
+    with open(path) as f:
+        return json.load(f)
+
+
+class PerClassMetrics(BaseModel):
+    precision: float
+    recall: float
+    f1_score: float
+    support: int
+
+
+class ConfusionMatrixData(BaseModel):
+    labels: List[str]
+    matrix: List[List[int]]
+
+
+class EvaluationSnapshot(BaseModel):
+    id: str
+    model_version_id: str
+    dataset_name: str
+    accuracy: float
+    precision: float
+    recall: float
+    f1_score: float
+    confusion_matrix: ConfusionMatrixData
+    classification_report: dict[str, PerClassMetrics]
+    total_samples: int
+    evaluated_at: str
+
+
+class ModelVersionInfo(BaseModel):
+    id: str
+    version_name: str
+    base_model: Optional[str] = None
+    is_active: bool
+    created_at: str
+
+
+class CurrentMetricsResponse(BaseModel):
+    model: ModelVersionInfo
+    evaluation: Optional[EvaluationSnapshot] = None
+
+
+class HistoryMetricsResponse(BaseModel):
+    model: ModelVersionInfo
+    evaluations: List[EvaluationSnapshot]
+
+
+@app.get("/metrics/current", response_model=CurrentMetricsResponse)
+async def metrics_current() -> CurrentMetricsResponse:
+    """Return the latest evaluation snapshot for the active deployed model."""
+    versions = _load_json(EVAL_DIR / "model_versions.json")
+    evaluations = _load_json(EVAL_DIR / "model_evaluations.json")
+
+    active = next((v for v in versions if v.get("is_active")), None)
+    if active is None:
+        raise HTTPException(status_code=404, detail="No active model version found")
+
+    model_info = ModelVersionInfo(
+        id=active["id"],
+        version_name=active["version_name"],
+        base_model=active.get("base_model"),
+        is_active=active["is_active"],
+        created_at=active["created_at"],
+    )
+
+    related = [e for e in evaluations if e["model_version_id"] == active["id"]]
+    related.sort(key=lambda e: e.get("evaluated_at", ""), reverse=True)
+
+    latest = EvaluationSnapshot(**related[0]) if related else None
+    return CurrentMetricsResponse(model=model_info, evaluation=latest)
+
+
+@app.get("/metrics/history", response_model=List[HistoryMetricsResponse])
+async def metrics_history() -> List[HistoryMetricsResponse]:
+    """Return all evaluations grouped by model version (newest first)."""
+    versions = _load_json(EVAL_DIR / "model_versions.json")
+    evaluations = _load_json(EVAL_DIR / "model_evaluations.json")
+
+    results: List[HistoryMetricsResponse] = []
+    for v in versions:
+        model_info = ModelVersionInfo(
+            id=v["id"],
+            version_name=v["version_name"],
+            base_model=v.get("base_model"),
+            is_active=v.get("is_active", False),
+            created_at=v["created_at"],
+        )
+        related = [e for e in evaluations if e["model_version_id"] == v["id"]]
+        related.sort(key=lambda e: e.get("evaluated_at", ""), reverse=True)
+        evals = [EvaluationSnapshot(**e) for e in related]
+        results.append(HistoryMetricsResponse(model=model_info, evaluations=evals))
+
+    return results
 
 
 # ==================== LIME EXPLANATION FUNCTIONALITY ====================
