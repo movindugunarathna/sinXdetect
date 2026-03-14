@@ -31,6 +31,12 @@ function App() {
   const [feedbackDone, setFeedbackDone] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
 
+  const wordCount = useMemo(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+  }, [text]);
+
   const confidencePct = useMemo(() => {
     if (!result?.confidence) return null;
     return (result.confidence * 100).toFixed(2);
@@ -179,6 +185,25 @@ function App() {
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base text-gray-800 placeholder:text-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
               placeholder="සිංහල පෙළ මෙහි පුරන්න"
             />
+            <div className="flex items-center justify-between">
+              <p className={`text-xs ${wordCount >= 150 ? 'text-emerald-600' : wordCount > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                {wordCount > 0 ? (
+                  <>
+                    <span className="font-medium">{wordCount}</span> word{wordCount !== 1 ? 's' : ''}
+                    {wordCount < 150 && (
+                      <span> &middot; Enter at least 150 words for better results</span>
+                    )}
+                  </>
+                ) : (
+                  'Enter at least 150 words for better results'
+                )}
+              </p>
+              {wordCount > 0 && wordCount < 150 && (
+                <span className="text-xs text-amber-500 font-medium tabular-nums">
+                  {150 - wordCount} more needed
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
