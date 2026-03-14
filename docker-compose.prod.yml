@@ -8,6 +8,16 @@
 # Production URLs:
 #   - Frontend: https://sinxdetect.movindu.com
 #   - Backend API: https://api.sinxdetect.movindu.com
+#
+# First-time droplet setup:
+#   sudo mkdir -p /opt/sinxdetect/data
+#   sudo chown 1000:1000 /opt/sinxdetect/data
+#
+# Backup the feedback database:
+#   sqlite3 /opt/sinxdetect/data/feedback.db ".backup /opt/sinxdetect/data/feedback-$(date +%F).bak"
+#
+# Query feedback directly on the droplet:
+#   sqlite3 /opt/sinxdetect/data/feedback.db "SELECT id, predicted_label, corrected_label, user_name, status, created_at FROM classification_feedback;"
 
 services:
   # Combined sinXdetect Application (Frontend + Backend)
@@ -26,8 +36,11 @@ services:
     volumes:
       # Mount SSL certificates from Let's Encrypt
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Bind-mount host directory for feedback DB (survives docker system prune)
+      - /opt/sinxdetect/data:/app/data
     environment:
       - MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
+      - FEEDBACK_DATA_DIR=/app/data
       - PYTHONUNBUFFERED=1
       - UVICORN_WORKERS=2
       - NODE_ENV=production

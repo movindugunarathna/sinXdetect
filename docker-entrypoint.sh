@@ -126,6 +126,12 @@ server {
 NGINX_HTTP_ONLY
 fi
 
+# Ensure feedback data directory exists and is writable
+FEEDBACK_DIR="${FEEDBACK_DATA_DIR:-/app/data}"
+echo "Preparing feedback data directory: ${FEEDBACK_DIR}"
+mkdir -p "${FEEDBACK_DIR}"
+chmod 755 "${FEEDBACK_DIR}"
+
 # Test nginx configuration
 echo "Testing nginx configuration..."
 nginx -t

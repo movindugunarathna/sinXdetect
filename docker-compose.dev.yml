@@ -29,8 +29,11 @@ services:
       # Mount source code for hot-reload
       - ./backend:/app
       - ./ml/models:/app/ml/models:ro
+      - ./ml/evaluations:/app/ml/evaluations:ro
+      - feedback-data-dev:/app/data
     environment:
       - MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
+      - FEEDBACK_DATA_DIR=/app/data
       - PYTHONUNBUFFERED=1
       - DEBUG=1
     command:
@@ -58,6 +61,9 @@ services:
     networks:
       - sinxdetect-network
     restart: unless-stopped
+
+volumes:
+  feedback-data-dev:
 
 networks:
   sinxdetect-network:
