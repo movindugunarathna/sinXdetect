@@ -33,7 +33,7 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_PATH = REPO_ROOT / "ml" / "models" / "sinbert_sinhala_classifier"
 EVAL_DIR = REPO_ROOT / "ml" / "evaluations"
-DATA_DIR = REPO_ROOT / "data"
+DATA_DIR = Path(os.getenv("FEEDBACK_DATA_DIR", str(REPO_ROOT / "data")))
 FEEDBACK_DB = DATA_DIR / "feedback.db"
 
 # ---------------------------------------------------------------------------

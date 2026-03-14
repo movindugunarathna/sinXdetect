@@ -8,14 +8,36 @@
     "recall": 0.9231,
     "f1_score": 0.9321,
     "confusion_matrix": {
-      "labels": ["HUMAN", "AI"],
-      "matrix": [[467, 33], [38, 462]]
+      "labels": [
+        "HUMAN",
+        "AI"
+      ],
+      "matrix": [
+        [
+          467,
+          33
+        ],
+        [
+          38,
+          462
+        ]
+      ]
     },
     "classification_report": {
-      "HUMAN": { "precision": 0.9248, "recall": 0.9340, "f1_score": 0.9294, "support": 500 },
-      "AI": { "precision": 0.9333, "recall": 0.9240, "f1_score": 0.9286, "support": 500 }
+      "HUMAN": {
+        "precision": 0.9248,
+        "recall": 0.9340,
+        "f1_score": 0.9294,
+        "support": 500
+      },
+      "AI": {
+        "precision": 0.9333,
+        "recall": 0.9240,
+        "f1_score": 0.9286,
+        "support": 500
+      }
     },
     "total_samples": 1000,
-    "evaluated_at": "2025-01-15T12:00:00Z"
+    "evaluated_at": "2025-03-14T12:00:00Z"
   }
 ]

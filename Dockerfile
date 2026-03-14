@@ -63,11 +63,12 @@ RUN pip install --no-cache-dir \
 # Copy backend code
 COPY backend/ ./backend/
 
-# Create directory for ML models (will be mounted or copied)
-RUN mkdir -p /app/ml/models
+# Create directories for ML artifacts and feedback data
+RUN mkdir -p /app/ml/models /app/ml/evaluations /app/data
 
-# Copy ML models if they exist (for deployments that include models)
+# Copy ML models and evaluation metadata
 COPY ml/models/ ./ml/models/
+COPY ml/evaluations/ ./ml/evaluations/
 
 # Copy built frontend from builder stage
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
@@ -81,9 +82,9 @@ COPY nginx.conf /etc/nginx/conf.d/sinxdetect.conf
 # Copy supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/sinxdetect.conf
 
-# Copy entrypoint script
+# Copy entrypoint script and fix line endings (Windows CRLF -> Unix LF)
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 # Expose ports 80 and 443 (nginx serves both frontend and proxies to backend)
 EXPOSE 80 443
@@ -91,6 +92,7 @@ EXPOSE 80 443
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV MODEL_PATH=/app/ml/models/sinbert_sinhala_classifier
+ENV FEEDBACK_DATA_DIR=/app/data
 ENV UVICORN_WORKERS=1
 ENV PYTHONPATH=/app:/app/backend
 

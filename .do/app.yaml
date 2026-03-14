@@ -21,6 +21,8 @@ services:
         value: '1'
       - key: MODEL_PATH
         value: '/app/ml/models/sinbert_sinhala_classifier'
+      - key: FEEDBACK_DATA_DIR
+        value: '/app/data'
       - key: UVICORN_WORKERS
         value: '1'
       - key: TF_CPP_MIN_LOG_LEVEL
