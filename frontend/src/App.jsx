@@ -92,7 +92,6 @@ function App() {
       }
       const data = await response.json();
       setExplanation(data);
-      // Also set the basic result
       setResult({
         label: data.predicted_class === 'AI-generated' ? 'AI' : 'HUMAN',
         confidence: data.confidence,
@@ -186,7 +185,7 @@ function App() {
               placeholder="සිංහල පෙළ මෙහි පුරන්න"
             />
             <div className="flex items-center justify-between">
-              <p className={`text-xs ${wordCount >= 150 ? 'text-emerald-600' : wordCount > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+              <p className={`text-xs ${wordCount >= 150 ? 'text-cyan-600' : wordCount > 0 ? 'text-gray-500' : 'text-gray-400'}`}>
                 {wordCount > 0 ? (
                   <>
                     <span className="font-medium">{wordCount}</span> word{wordCount !== 1 ? 's' : ''}
@@ -199,7 +198,7 @@ function App() {
                 )}
               </p>
               {wordCount > 0 && wordCount < 150 && (
-                <span className="text-xs text-amber-500 font-medium tabular-nums">
+                <span className="text-xs text-gray-400 font-medium tabular-nums">
                   {150 - wordCount} more needed
                 </span>
               )}
@@ -247,11 +246,11 @@ function App() {
               type="button"
               onClick={handleExplain}
               disabled={explainLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 py-3 font-medium text-white shadow-lg shadow-purple-500/25 transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-cyan-600 bg-white px-5 py-3 font-medium text-cyan-700 shadow-sm transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {explainLoading && (
                 <span
-                  className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                  className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-cyan-300 border-t-cyan-600"
                   aria-hidden="true"
                 />
               )}
@@ -266,7 +265,7 @@ function App() {
                   <span className="text-sm uppercase tracking-[0.15em] text-gray-500">
                     Prediction
                   </span>
-                  <span className="rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 px-4 py-1.5 text-base font-semibold text-white border border-cyan-300 shadow-md">
+                  <span className={`rounded-full px-4 py-1.5 text-base font-semibold text-white shadow-md ${result.label === 'HUMAN' ? 'bg-emerald-500' : 'bg-red-500'}`}>
                     {result.label}
                   </span>
                 </div>
@@ -278,7 +277,6 @@ function App() {
                     width="160"
                     height="160"
                   >
-                    {/* Background circle */}
                     <circle
                       cx="80"
                       cy="80"
@@ -287,12 +285,11 @@ function App() {
                       strokeWidth="5"
                       fill="none"
                     />
-                    {/* Progress circle */}
                     <circle
                       cx="80"
                       cy="80"
                       r="70"
-                      stroke={result.label === 'HUMAN' ? '#10b981' : '#a855f7'}
+                      stroke={result.label === 'HUMAN' ? '#10b981' : '#ef4444'}
                       strokeWidth="12"
                       fill="none"
                       strokeDasharray={`${2 * Math.PI * 70}`}
@@ -302,19 +299,12 @@ function App() {
                       strokeLinecap="round"
                       className="transition-all duration-1000 ease-out"
                       style={{
-                        filter: `drop-shadow(0 0 8px ${
-                          result.label === 'HUMAN' ? '#10b98180' : '#a855f780'
-                        })`,
+                        filter: `drop-shadow(0 0 8px ${result.label === 'HUMAN' ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.5)'})`,
                       }}
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span
-                      className="text-3xl font-bold"
-                      style={{
-                        color: result.label === 'HUMAN' ? '#10b981' : '#a855f7',
-                      }}
-                    >
+                    <span className={`text-3xl font-bold ${result.label === 'HUMAN' ? 'text-emerald-600' : 'text-red-600'}`}>
                       {confidencePct}%
                     </span>
                     <span className="text-xs text-gray-500 mt-1">
@@ -335,12 +325,12 @@ function App() {
                       {(result.probabilities.HUMAN * 100).toFixed(2)}%
                     </span>
                   </div>
-                  <div className="rounded-lg bg-purple-50 border border-purple-200 px-4 py-3 flex items-center justify-between">
+                  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
                       <span className="font-medium">AI</span>
                     </div>
-                    <span className="font-semibold text-purple-600">
+                    <span className="font-semibold text-red-600">
                       {(result.probabilities.AI * 100).toFixed(2)}%
                     </span>
                   </div>
@@ -350,7 +340,7 @@ function App() {
               {/* Feedback */}
               <div className="pt-4 border-t border-gray-200">
                 {feedbackDone ? (
-                  <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-lg px-4 py-3">
                     <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
@@ -404,7 +394,7 @@ function App() {
                           onClick={() => setFeedbackLabel('AI')}
                           className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                             feedbackLabel === 'AI'
-                              ? 'border-purple-500 bg-purple-50 text-purple-700 ring-2 ring-purple-500/20'
+                              ? 'border-red-500 bg-red-50 text-red-700 ring-2 ring-red-500/20'
                               : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400'
                           }`}
                         >
@@ -459,7 +449,7 @@ function App() {
             <section className="rounded-xl border border-gray-200 bg-white p-6 space-y-5 shadow-sm">
               <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
                 <svg
-                  className="w-5 h-5 text-purple-600"
+                  className="w-5 h-5 text-cyan-600"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -475,7 +465,7 @@ function App() {
                   LIME Explanation
                 </h2>
                 {explanation.error && (
-                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">
+                  <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
                     {explanation.error}
                   </span>
                 )}
@@ -495,7 +485,7 @@ function App() {
                           <span className="text-gray-600">AI-generated</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded bg-green-100 border border-green-400"></div>
+                          <div className="w-3 h-3 rounded bg-emerald-100 border border-emerald-400"></div>
                           <span className="text-gray-600">Human-written</span>
                         </div>
                       </div>
@@ -509,8 +499,8 @@ function App() {
                             key={idx}
                             className={`rounded-lg border p-3 ${
                               item.color === 'red'
-                                ? 'bg-red-50 border-red-300'
-                                : 'bg-green-50 border-green-300'
+                                ? 'bg-red-50 border-red-200'
+                                : 'bg-emerald-50 border-emerald-200'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -520,7 +510,7 @@ function App() {
                                     className={`text-sm font-medium ${
                                       item.color === 'red'
                                         ? 'text-red-800'
-                                        : 'text-green-800'
+                                        : 'text-emerald-800'
                                     }`}
                                   >
                                     {item.phrase}
@@ -528,8 +518,8 @@ function App() {
                                   <span
                                     className={`text-xs px-2 py-0.5 rounded-full ${
                                       item.color === 'red'
-                                        ? 'bg-red-200 text-red-700'
-                                        : 'bg-green-200 text-green-700'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-emerald-100 text-emerald-700'
                                     }`}
                                   >
                                     {item.word_count} word
@@ -548,7 +538,7 @@ function App() {
                                   className={`text-lg font-bold ${
                                     item.color === 'red'
                                       ? 'text-red-600'
-                                      : 'text-green-600'
+                                      : 'text-emerald-600'
                                   }`}
                                 >
                                   {(Math.abs(item.weight) * 100).toFixed(1)}%
@@ -609,20 +599,17 @@ function App() {
   );
 }
 
-// Helper function to render highlighted text
 function renderHighlightedText(originalText, highlights) {
   if (!highlights || highlights.length === 0) {
     return <span className="text-gray-800">{originalText}</span>;
   }
 
-  // Sort highlights by start position
   const sortedHighlights = [...highlights].sort((a, b) => a.start - b.start);
 
   const elements = [];
   let lastIndex = 0;
 
   sortedHighlights.forEach((highlight, idx) => {
-    // Add text before highlight
     if (highlight.start > lastIndex) {
       elements.push(
         <span key={`text-${idx}`} className="text-gray-800">
@@ -631,7 +618,6 @@ function renderHighlightedText(originalText, highlights) {
       );
     }
 
-    // Add highlighted text
     const highlightedText = originalText.substring(
       highlight.start,
       highlight.end
@@ -641,8 +627,8 @@ function renderHighlightedText(originalText, highlights) {
         key={`highlight-${idx}`}
         className={`px-1 py-0.5 rounded font-medium ${
           highlight.color === 'red'
-            ? 'bg-red-200 text-red-900 border-b-2 border-red-500'
-            : 'bg-green-200 text-green-900 border-b-2 border-green-500'
+            ? 'bg-red-100 text-red-900 border-b-2 border-red-400'
+            : 'bg-emerald-100 text-emerald-900 border-b-2 border-emerald-500'
         }`}
         title={`${highlight.indicates}: ${(
           Math.abs(highlight.weight) * 100
@@ -655,7 +641,6 @@ function renderHighlightedText(originalText, highlights) {
     lastIndex = highlight.end;
   });
 
-  // Add remaining text
   if (lastIndex < originalText.length) {
     elements.push(
       <span key="text-end" className="text-gray-800">

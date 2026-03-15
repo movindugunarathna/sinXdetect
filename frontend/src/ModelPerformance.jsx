@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react';
 const API_BASE =
   import.meta.env.VITE_API_URL ?? 'https://api.sinxdetect.movindu.com';
 
-function MetricPill({ label, value, color }) {
+function MetricPill({ label, value }) {
   const pct = (value * 100).toFixed(2);
   return (
     <div className="flex flex-col items-center rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 min-w-[100px]">
       <span className="text-xs uppercase tracking-wider text-gray-500">
         {label}
       </span>
-      <span className={`text-xl font-bold ${color}`}>{pct}%</span>
+      <span className="text-xl font-bold text-cyan-700">{pct}%</span>
     </div>
   );
 }
@@ -68,8 +68,8 @@ function ConfusionMatrix({ data }) {
                   const isDiag = ri === ci;
                   const intensity = maxVal > 0 ? val / maxVal : 0;
                   const bg = isDiag
-                    ? `rgba(16, 185, 129, ${0.1 + intensity * 0.4})`
-                    : `rgba(239, 68, 68, ${intensity * 0.25})`;
+                    ? `rgba(16, 185, 129, ${0.08 + intensity * 0.25})`
+                    : `rgba(239, 68, 68, ${0.05 + intensity * 0.15})`;
                   return (
                     <td
                       key={ci}
@@ -187,26 +187,10 @@ export default function ModelPerformance() {
       {expanded && (
         <div className="space-y-6 pt-2">
           <div className="flex flex-wrap justify-center gap-3">
-            <MetricPill
-              label="Accuracy"
-              value={ev.accuracy}
-              color="text-emerald-600"
-            />
-            <MetricPill
-              label="Precision"
-              value={ev.precision}
-              color="text-blue-600"
-            />
-            <MetricPill
-              label="Recall"
-              value={ev.recall}
-              color="text-purple-600"
-            />
-            <MetricPill
-              label="F1 Score"
-              value={ev.f1_score}
-              color="text-cyan-600"
-            />
+            <MetricPill label="Accuracy" value={ev.accuracy} />
+            <MetricPill label="Precision" value={ev.precision} />
+            <MetricPill label="Recall" value={ev.recall} />
+            <MetricPill label="F1 Score" value={ev.f1_score} />
           </div>
 
           <ConfusionMatrix data={ev.confusion_matrix} />
@@ -224,7 +208,7 @@ export default function ModelPerformance() {
                       className={`rounded-lg border px-4 py-3 ${
                         label === 'HUMAN'
                           ? 'bg-emerald-50 border-emerald-200'
-                          : 'bg-purple-50 border-purple-200'
+                          : 'bg-red-50 border-red-200'
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
@@ -232,7 +216,7 @@ export default function ModelPerformance() {
                           className={`w-2.5 h-2.5 rounded-full ${
                             label === 'HUMAN'
                               ? 'bg-emerald-500'
-                              : 'bg-purple-500'
+                              : 'bg-red-500'
                           }`}
                         />
                         <span className="text-sm font-semibold text-gray-800">
