@@ -64,18 +64,34 @@ _FEEDBACK_MIGRATIONS = [
 ]
 
 
-def _get_db() -> sqlite3.Connection:
-    """Return a connection to the feedback database, creating it if needed."""
+_db_initialized = False
+
+
+def _init_db() -> None:
+    """Create the database and run migrations once at startup."""
+    global _db_initialized
+    if _db_initialized:
+        return
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(FEEDBACK_DB))
+    try:
+        conn.executescript(_FEEDBACK_SCHEMA)
+        for stmt in _FEEDBACK_MIGRATIONS:
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+        conn.commit()
+    finally:
+        conn.close()
+    _db_initialized = True
+
+
+def _get_db() -> sqlite3.Connection:
+    """Return a connection to the feedback database."""
+    _init_db()
+    conn = sqlite3.connect(str(FEEDBACK_DB))
     conn.row_factory = sqlite3.Row
-    conn.executescript(_FEEDBACK_SCHEMA)
-    for stmt in _FEEDBACK_MIGRATIONS:
-        try:
-            conn.execute(stmt)
-        except sqlite3.OperationalError:
-            pass  # column already exists
-    conn.commit()
     return conn
 
 
@@ -160,6 +176,9 @@ class TextRequest(BaseModel):
     return_probabilities: bool = False
 
 
+MAX_BATCH_SIZE = 32
+
+
 class BatchRequest(BaseModel):
     texts: List[str]
     return_probabilities: bool = False
@@ -184,6 +203,8 @@ class ExplainRequest(BaseModel):
 class ExplanationResponse(BaseModel):
     explanation_data: dict
     highlighted_text: List[dict]
+    sentence_explanations: List[dict] = []
+    evidence_summary: Optional[dict] = None
     predicted_class: str
     confidence: float
     error: Optional[str] = None
@@ -221,6 +242,12 @@ class FeedbackPatchRequest(BaseModel):
     status: str  # APPROVED or REJECTED
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup so migrations run once."""
+    _init_db()
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
@@ -254,15 +281,27 @@ async def root() -> dict:
     }
 
 
+def _classify_sync(text: str, return_probabilities: bool) -> dict:
+    """Run classification in a thread (model.predict blocks the event loop)."""
+    classifier = get_classifier()
+    return classifier.classify(text, return_probabilities=return_probabilities)
+
+
+def _classify_batch_sync(texts: list, return_probabilities: bool) -> list:
+    """Run batch classification in a thread."""
+    classifier = get_classifier()
+    return classifier.classify_batch(texts, return_probabilities=return_probabilities)
+
+
 @app.post("/classify", response_model=PredictionResponse)
 async def classify(request: TextRequest) -> PredictionResponse:
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text is empty.")
 
-    classifier = get_classifier()
+    loop = asyncio.get_running_loop()
     try:
-        result = classifier.classify(
-            request.text, return_probabilities=request.return_probabilities
+        result = await loop.run_in_executor(
+            _executor, _classify_sync, request.text, request.return_probabilities
         )
     except Exception as exc:  # pragma: no cover - surface runtime issues to client
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -275,11 +314,16 @@ async def classify(request: TextRequest) -> PredictionResponse:
 async def classify_batch(request: BatchRequest) -> BatchPredictionResponse:
     if not request.texts:
         raise HTTPException(status_code=400, detail="texts must not be empty.")
+    if len(request.texts) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch size {len(request.texts)} exceeds maximum of {MAX_BATCH_SIZE}.",
+        )
 
-    classifier = get_classifier()
+    loop = asyncio.get_running_loop()
     try:
-        results = classifier.classify_batch(
-            request.texts, return_probabilities=request.return_probabilities
+        results = await loop.run_in_executor(
+            _executor, _classify_batch_sync, request.texts, request.return_probabilities
         )
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -595,23 +639,23 @@ def extract_word_importance(explanation, tokens: List[str], class_idx: int = 1) 
     return word_importance
 
 
-def group_into_phrases(word_importance: dict, tokens: List[str], token_positions: List[tuple], max_gap: int = 1) -> List[dict]:
+def group_into_phrases(word_importance: dict, tokens: List[str], token_positions: List[tuple],
+                       original_text: str, max_gap: int = 2) -> List[dict]:
     """
-    Group consecutive or nearby important words into phrases.
-    
-    Args:
-        word_importance: Dict mapping word indices to their importance data
-        tokens: List of all tokens
-        token_positions: List of (start, end) positions for each token
-        max_gap: Maximum number of non-important words between important words to still group them
-        
-    Returns:
-        List of phrase dictionaries
+    Group nearby important words into readable phrases.
+    Includes gap words in the phrase text so the output reads naturally.
+    Does not group across sentence boundaries.
     """
     if not word_importance:
         return []
-    
-    # Sort indices
+
+    # Detect sentence boundary positions (indices of tokens that end a sentence)
+    _SENT_END = re.compile(r'[.!?।\u0dea]$')  # period, !, ?, Sinhala purna virama
+    sentence_breaks: set = set()
+    for idx, tok in enumerate(tokens):
+        if _SENT_END.search(tok):
+            sentence_breaks.add(idx)
+
     sorted_indices = sorted(word_importance.keys())
     phrases = []
     current_phrase = {
@@ -619,64 +663,155 @@ def group_into_phrases(word_importance: dict, tokens: List[str], token_positions
         'weights': [word_importance[sorted_indices[0]]['weight']],
         'color': word_importance[sorted_indices[0]]['color']
     }
-    
+
     for i in range(1, len(sorted_indices)):
         curr_idx = sorted_indices[i]
         prev_idx = current_phrase['indices'][-1]
         gap = curr_idx - prev_idx - 1
-        
-        # Check if same color and within gap threshold
+
+        # Check if a sentence boundary sits between prev and curr
+        crosses_sentence = any(b >= prev_idx and b < curr_idx for b in sentence_breaks)
+
         same_color = word_importance[curr_idx]['color'] == current_phrase['color']
         within_gap = gap <= max_gap
-        
-        if same_color and within_gap:
-            # Extend current phrase
+
+        if same_color and within_gap and not crosses_sentence:
             current_phrase['indices'].append(curr_idx)
             current_phrase['weights'].append(word_importance[curr_idx]['weight'])
         else:
-            # Finalize current phrase and start new one
             phrases.append(current_phrase)
             current_phrase = {
                 'indices': [curr_idx],
                 'weights': [word_importance[curr_idx]['weight']],
                 'color': word_importance[curr_idx]['color']
             }
-    
-    # Add the last phrase
+
     phrases.append(current_phrase)
-    
-    # Convert phrases to output format
+
     highlighted_phrases = []
     for phrase_group in phrases:
         indices = phrase_group['indices']
         weights = phrase_group['weights']
         color = phrase_group['color']
-        
-        # Build the phrase text
-        phrase_words = [tokens[idx] for idx in indices]
-        phrase_text = ' '.join(phrase_words)
-        
-        # Calculate average weight for the phrase
-        avg_weight = sum(weights) / len(weights)
-        
-        # Get start and end positions in original text
+
+        # Use the original text span (first token start → last token end)
+        # so gap words are included and the phrase reads naturally
         start_pos = token_positions[indices[0]][0] if indices[0] < len(token_positions) else 0
         end_pos = token_positions[indices[-1]][1] if indices[-1] < len(token_positions) else 0
-        
-        # Determine what this phrase indicates
+        phrase_text = original_text[start_pos:end_pos]
+
+        avg_weight = sum(weights) / len(weights)
         indicates = 'AI-generated' if color == 'red' else 'Human-written'
-        
+
         highlighted_phrases.append({
             'phrase': phrase_text,
             'color': color,
             'weight': float(avg_weight),
             'start': start_pos,
             'end': end_pos,
-            'word_count': len(phrase_words),
+            'word_count': len(indices),
             'indicates': indicates
         })
-    
+
     return highlighted_phrases
+
+
+def group_into_sentences(word_importance: dict, tokens: List[str],
+                         token_positions: List[tuple], original_text: str) -> List[dict]:
+    """
+    Aggregate word-level importance into sentence-level explanations.
+    Each sentence gets a net score: positive → AI-generated, negative → Human-written.
+    """
+    if not tokens:
+        return []
+
+    # Split tokens into sentences by detecting sentence-ending punctuation
+    _SENT_END = re.compile(r'[.!?।\u0dea]$')
+    sentences: list = []  # list of (start_tok_idx, end_tok_idx) inclusive
+    sent_start = 0
+    for idx, tok in enumerate(tokens):
+        if _SENT_END.search(tok) or idx == len(tokens) - 1:
+            sentences.append((sent_start, idx))
+            sent_start = idx + 1
+
+    if not sentences:
+        sentences = [(0, len(tokens) - 1)]
+
+    result = []
+    for sent_start_idx, sent_end_idx in sentences:
+        # Collect importance weights for tokens in this sentence
+        sent_weights = []
+        important_count = 0
+        for tok_idx in range(sent_start_idx, sent_end_idx + 1):
+            if tok_idx in word_importance:
+                sent_weights.append(word_importance[tok_idx]['weight'])
+                important_count += 1
+            else:
+                sent_weights.append(0.0)
+
+        total_tokens = sent_end_idx - sent_start_idx + 1
+        if total_tokens == 0:
+            continue
+
+        # Net weight: positive means AI-leaning, negative means Human-leaning
+        net_weight = sum(sent_weights)
+        abs_total = sum(abs(w) for w in sent_weights)
+
+        # Extract the sentence text from the original
+        s_start = token_positions[sent_start_idx][0] if sent_start_idx < len(token_positions) else 0
+        s_end = token_positions[sent_end_idx][1] if sent_end_idx < len(token_positions) else len(original_text)
+        sentence_text = original_text[s_start:s_end]
+
+        # Classify: negligible signal → neutral (unhighlighted in the text view)
+        if abs_total < 0.02:
+            color = 'neutral'
+            indicates = 'Neutral'
+        elif net_weight > 0:
+            color = 'red'
+            indicates = 'AI-generated'
+        else:
+            color = 'green'
+            indicates = 'Human-written'
+
+        result.append({
+            'sentence': sentence_text,
+            'color': color,
+            'net_weight': float(net_weight),
+            'abs_weight': float(abs_total),
+            'important_words': important_count,
+            'total_words': total_tokens,
+            'start': s_start,
+            'end': s_end,
+            'indicates': indicates,
+        })
+
+    # Sort by position for the highlighted-text view (frontend re-sorts if needed)
+    result.sort(key=lambda x: x['start'])
+    return result
+
+
+def build_evidence_summary(word_importance: dict) -> dict:
+    """
+    Aggregate all word-level evidence into an overall summary.
+    Returns total weight pointing to AI and to Human, plus a ratio.
+    """
+    ai_total = 0.0
+    human_total = 0.0
+    for data in word_importance.values():
+        w = data['weight']
+        if w > 0:
+            ai_total += w
+        else:
+            human_total += abs(w)
+
+    grand = ai_total + human_total
+    return {
+        'ai_evidence': float(ai_total),
+        'human_evidence': float(human_total),
+        'ai_ratio': float(ai_total / grand) if grand > 0 else 0.5,
+        'human_ratio': float(human_total / grand) if grand > 0 else 0.5,
+        'total_important_words': len(word_importance),
+    }
 
 
 def _run_lime_explanation(text: str, tokens: List[str], token_positions: List[tuple], 
@@ -722,26 +857,36 @@ def _run_lime_explanation(text: str, tokens: List[str], token_positions: List[tu
         
         # Extract word importance for AI-generated class (class 1)
         word_importance = extract_word_importance(explanation, tokens, class_idx=1)
-        
+
         # Filter by minimum importance threshold
         word_importance = {
             idx: data for idx, data in word_importance.items()
             if abs(data['weight']) > 0.01
         }
-        
-        # Group words into phrases
-        highlighted_text = group_into_phrases(word_importance, tokens, token_positions, max_gap=1)
-        
-        # Sort by absolute weight (most important first)
+
+        # Group words into readable phrases (includes gap words)
+        highlighted_text = group_into_phrases(
+            word_importance, tokens, token_positions, text, max_gap=2
+        )
         highlighted_text.sort(key=lambda x: abs(x['weight']), reverse=True)
-        
+
+        # Sentence-level aggregation for easier interpretation
+        sentence_explanations = group_into_sentences(
+            word_importance, tokens, token_positions, text
+        )
+
+        # Overall evidence summary
+        evidence_summary = build_evidence_summary(word_importance)
+
         predicted_class = 'AI-generated' if prediction_proba[1] > 0.5 else 'Human-written'
         confidence = float(max(prediction_proba))
-        
+
         return {
             'success': True,
             'explanation_data': explanation_data,
             'highlighted_text': highlighted_text,
+            'sentence_explanations': sentence_explanations,
+            'evidence_summary': evidence_summary,
             'predicted_class': predicted_class,
             'confidence': confidence
         }
@@ -821,7 +966,7 @@ async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
         
         # Run LIME explanation with timeout (120 seconds)
         TIMEOUT_SECONDS = 120
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         
         try:
             result = await asyncio.wait_for(
@@ -855,6 +1000,8 @@ async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
             return ExplanationResponse(
                 explanation_data=result['explanation_data'],
                 highlighted_text=result['highlighted_text'],
+                sentence_explanations=result.get('sentence_explanations', []),
+                evidence_summary=result.get('evidence_summary'),
                 predicted_class=result['predicted_class'],
                 confidence=result['confidence']
             )
@@ -867,6 +1014,8 @@ async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
                     'intercept': [0.0, 0.0]
                 }),
                 highlighted_text=result.get('highlighted_text', []),
+                sentence_explanations=result.get('sentence_explanations', []),
+                evidence_summary=result.get('evidence_summary'),
                 predicted_class=result.get('predicted_class', 'Unknown'),
                 confidence=result.get('confidence', 0.5),
                 error=result.get('error', 'Unable to generate detailed explanation')
