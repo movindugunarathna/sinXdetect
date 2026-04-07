@@ -6,11 +6,20 @@ import LimeExplanation from './LimeExplanation';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'https://api.sinxdetect.movindu.com';
 
+/** True if the string contains at least one Sinhala script character (Unicode U+0D80–U+0DFF). */
+function textContainsSinhalaScript(s) {
+  return /[\u0D80-\u0DFF]/.test(s);
+}
+
+const LANGUAGE_WARNING =
+  'This model is trained for Sinhala text only. Other languages are not supported.';
+
 function App() {
   const [text, setText] = useState('');
   const [includeProbs, setIncludeProbs] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [languageWarning, setLanguageWarning] = useState('');
   const [result, setResult] = useState(null);
   const [explanation, setExplanation] = useState(null);
   const [explainLoading, setExplainLoading] = useState(false);
@@ -24,10 +33,19 @@ function App() {
   const handleSubmit = async () => {
     if (!text.trim()) {
       setError('Please enter some Sinhala text first.');
+      setLanguageWarning('');
+      return;
+    }
+    if (!textContainsSinhalaScript(text)) {
+      setLanguageWarning(LANGUAGE_WARNING);
+      setError('');
+      setResult(null);
+      setExplanation(null);
       return;
     }
     setLoading(true);
     setError('');
+    setLanguageWarning('');
     setResult(null);
     setExplanation(null);
     try {
@@ -52,10 +70,19 @@ function App() {
   const handleExplain = async () => {
     if (!text.trim()) {
       setError('Please enter some Sinhala text first.');
+      setLanguageWarning('');
+      return;
+    }
+    if (!textContainsSinhalaScript(text)) {
+      setLanguageWarning(LANGUAGE_WARNING);
+      setError('');
+      setResult(null);
+      setExplanation(null);
       return;
     }
     setExplainLoading(true);
     setError('');
+    setLanguageWarning('');
     setExplanation(null);
     try {
       const response = await fetch(`${API_BASE}/explain`, {
@@ -85,6 +112,7 @@ function App() {
   };
 
   const setSample = () => {
+    setLanguageWarning('');
     setText(
       'සිංහල භාෂාවෙන් යුතු මනුෂ්‍ය ලියූ වාක්‍යයක් උදාහරණයක් ලෙස මෙහි සදහන් වේ.'
     );
@@ -101,7 +129,7 @@ function App() {
             Text Classifier
           </h1>
           <p className="text-gray-600 text-sm sm:text-base">
-            Enter Sinhala text and get AI-powered classification with word-level
+            Enter Sinhala text and get AI-powered classification with optional LIME
             explanations.
           </p>
         </header>
@@ -115,8 +143,11 @@ function App() {
             </label>
             <textarea
               value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={5}
+              onChange={(e) => {
+                setText(e.target.value);
+                setLanguageWarning('');
+              }}
+              rows={10}
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base text-gray-800 placeholder:text-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
               placeholder="සිංහල පෙළ මෙහි පුරන්න"
             />
@@ -158,6 +189,14 @@ function App() {
               </label>
             </div>
           </div>
+          {languageWarning && (
+            <div
+              role="alert"
+              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            >
+              {languageWarning}
+            </div>
+          )}
           {error && (
             <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
               {error}

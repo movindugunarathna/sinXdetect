@@ -112,6 +112,20 @@ def _resolve_model_path(raw_path: str) -> str:
 
 MODEL_PATH = _resolve_model_path(os.getenv("MODEL_PATH", str(DEFAULT_MODEL_PATH)))
 
+# Sinhala Unicode block (basic detection for supported input language)
+_SINHALA_SCRIPT_RE = re.compile(r"[\u0D80-\u0DFF]")
+
+SINHALA_REQUIRED_DETAIL = (
+    "This model is trained for Sinhala text only. Other languages are not supported."
+)
+
+
+def _require_sinhala_script(text: str) -> None:
+    """Raise 400 if the text contains no Sinhala script characters."""
+    if not _SINHALA_SCRIPT_RE.search(text):
+        raise HTTPException(status_code=400, detail=SINHALA_REQUIRED_DETAIL)
+
+
 app = FastAPI(
     title="Sinhala Human vs AI Text Classifier with Explainability",
     version="2.0.0",
@@ -297,6 +311,7 @@ def _classify_batch_sync(texts: list, return_probabilities: bool) -> list:
 async def classify(request: TextRequest) -> PredictionResponse:
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text is empty.")
+    _require_sinhala_script(request.text)
 
     loop = asyncio.get_running_loop()
     try:
@@ -319,6 +334,13 @@ async def classify_batch(request: BatchRequest) -> BatchPredictionResponse:
             status_code=400,
             detail=f"Batch size {len(request.texts)} exceeds maximum of {MAX_BATCH_SIZE}.",
         )
+    for i, t in enumerate(request.texts):
+        s = t.strip()
+        if s and not _SINHALA_SCRIPT_RE.search(s):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{SINHALA_REQUIRED_DETAIL} (item {i})",
+            )
 
     loop = asyncio.get_running_loop()
     try:
@@ -934,7 +956,8 @@ async def explain_prediction(request: ExplainRequest) -> ExplanationResponse:
         
         if not text or not text.strip():
             raise HTTPException(status_code=400, detail="Text cannot be empty")
-        
+        _require_sinhala_script(text)
+
         # Tokenize the text (word-level tokenization for LIME)
         word_pattern = re.compile(r'\S+')
         matches = list(word_pattern.finditer(text))
