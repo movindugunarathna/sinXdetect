@@ -1,16 +1,11 @@
-import { useState } from 'react';
-
 function LimeExplanation({ explanation, text }) {
-  const [showWordDetail, setShowWordDetail] = useState(false);
-
   const summary = explanation.evidence_summary;
   const sentences = explanation.sentence_explanations || [];
-  const phrases = explanation.highlighted_text || [];
   // For the analysis list, filter out neutrals and sort by strength
   const significantSentences = sentences
     .filter((s) => s.color !== 'neutral')
     .sort((a, b) => Math.abs(b.net_weight) - Math.abs(a.net_weight));
-  const hasContent = sentences.length > 0 || phrases.length > 0;
+  const hasContent = sentences.length > 0;
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 space-y-5 shadow-sm">
@@ -151,85 +146,6 @@ function LimeExplanation({ explanation, text }) {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Word-Level Detail (collapsible) */}
-      {phrases.length > 0 && (
-        <div className="border-t border-gray-200 pt-3">
-          <button
-            type="button"
-            onClick={() => setShowWordDetail(!showWordDetail)}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-cyan-600 transition"
-          >
-            <svg
-              className={`w-3.5 h-3.5 transition-transform ${showWordDetail ? 'rotate-90' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            {showWordDetail ? 'Hide' : 'Show'} word-level detail ({phrases.length} phrases)
-          </button>
-          {showWordDetail && (
-            <div className="space-y-2 mt-3">
-              {phrases.slice(0, 15).map((item, idx) => (
-                <div
-                  key={idx}
-                  className={`rounded-lg border p-3 ${
-                    item.color === 'red'
-                      ? 'bg-red-50 border-red-200'
-                      : 'bg-emerald-50 border-emerald-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`text-sm font-medium ${
-                            item.color === 'red'
-                              ? 'text-red-800'
-                              : 'text-emerald-800'
-                          }`}
-                        >
-                          {item.phrase}
-                        </span>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full ${
-                            item.color === 'red'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-emerald-100 text-emerald-700'
-                          }`}
-                        >
-                          {item.word_count} word{item.word_count > 1 ? 's' : ''}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600">
-                        Indicates:{' '}
-                        <span className="font-medium">{item.indicates}</span>
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div
-                        className={`text-lg font-bold ${
-                          item.color === 'red' ? 'text-red-600' : 'text-emerald-600'
-                        }`}
-                      >
-                        {(Math.abs(item.weight) * 100).toFixed(1)}%
-                      </div>
-                      <div className="text-xs text-gray-500">importance</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {phrases.length > 15 && (
-                <p className="text-xs text-gray-500 text-center pt-1">
-                  Showing top 15 of {phrases.length} phrases
-                </p>
-              )}
-            </div>
-          )}
         </div>
       )}
 

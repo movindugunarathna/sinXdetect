@@ -129,7 +129,7 @@ function App() {
             Text Classifier
           </h1>
           <p className="text-gray-600 text-sm sm:text-base">
-            Enter Sinhala text and get AI-powered classification with word-level
+            Enter Sinhala text and get AI-powered classification with optional LIME
             explanations.
           </p>
         </header>
@@ -147,7 +147,7 @@ function App() {
                 setText(e.target.value);
                 setLanguageWarning('');
               }}
-              rows={5}
+              rows={10}
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base text-gray-800 placeholder:text-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
               placeholder="සිංහල පෙළ මෙහි පුරන්න"
             />
