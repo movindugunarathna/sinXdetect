@@ -3,6 +3,7 @@ import './App.css';
 import ModelPerformance from './ModelPerformance';
 import ResultsDisplay from './ResultsDisplay';
 import LimeExplanation from './LimeExplanation';
+import ShapExplanation from './ShapExplanation';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'https://api.sinxdetect.movindu.com';
 
@@ -23,6 +24,8 @@ function App() {
   const [result, setResult] = useState(null);
   const [explanation, setExplanation] = useState(null);
   const [explainLoading, setExplainLoading] = useState(false);
+  const [shapExplanation, setShapExplanation] = useState(null);
+  const [shapLoading, setShapLoading] = useState(false);
 
   const wordCount = useMemo(() => {
     const trimmed = text.trim();
@@ -48,6 +51,7 @@ function App() {
     setLanguageWarning('');
     setResult(null);
     setExplanation(null);
+    setShapExplanation(null);
     try {
       const response = await fetch(`${API_BASE}/classify`, {
         method: 'POST',
@@ -111,6 +115,50 @@ function App() {
     }
   };
 
+  const handleExplainShap = async () => {
+    if (!text.trim()) {
+      setError('Please enter some Sinhala text first.');
+      setLanguageWarning('');
+      return;
+    }
+    if (!textContainsSinhalaScript(text)) {
+      setLanguageWarning(LANGUAGE_WARNING);
+      setError('');
+      setResult(null);
+      setShapExplanation(null);
+      return;
+    }
+    setShapLoading(true);
+    setError('');
+    setLanguageWarning('');
+    setShapExplanation(null);
+    try {
+      const response = await fetch(`${API_BASE}/explain-shap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, num_samples: 100 }),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || 'Request failed');
+      }
+      const data = await response.json();
+      setShapExplanation(data);
+      setResult({
+        label: data.predicted_class === 'AI-generated' ? 'AI' : 'HUMAN',
+        confidence: data.confidence,
+        probabilities: {
+          HUMAN: data.explanation_data.predicted_probability[0],
+          AI: data.explanation_data.predicted_probability[1],
+        },
+      });
+    } catch (err) {
+      setError(err.message || 'Something went wrong');
+    } finally {
+      setShapLoading(false);
+    }
+  };
+
   const setSample = () => {
     setLanguageWarning('');
     setText(
@@ -129,8 +177,8 @@ function App() {
             Text Classifier
           </h1>
           <p className="text-gray-600 text-sm sm:text-base">
-            Enter Sinhala text and get AI-powered classification with optional LIME
-            explanations.
+            Enter Sinhala text and get AI-powered classification with LIME and
+            SHAP explanations.
           </p>
         </header>
 
@@ -202,39 +250,56 @@ function App() {
               {error}
             </div>
           )}
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-medium text-white shadow-lg shadow-cyan-500/25 transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {loading && (
-                <span
-                  className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                  aria-hidden="true"
-                />
-              )}
-              {loading ? 'Classifying...' : 'Classify'}
-            </button>
-            <button
-              type="button"
-              onClick={handleExplain}
-              disabled={explainLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-cyan-600 bg-white px-5 py-3 font-medium text-cyan-700 shadow-sm transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {explainLoading && (
-                <span
-                  className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-cyan-300 border-t-cyan-600"
-                  aria-hidden="true"
-                />
-              )}
-              {explainLoading ? 'Explaining...' : 'Explain with LIME'}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-3 items-center">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-medium text-white shadow-lg shadow-cyan-500/25 transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {loading && (
+                  <span
+                    className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                    aria-hidden="true"
+                  />
+                )}
+                {loading ? 'Classifying...' : 'Classify'}
+              </button>
+              <button
+                type="button"
+                onClick={handleExplain}
+                disabled={explainLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-cyan-600 bg-white px-5 py-3 font-medium text-cyan-700 shadow-sm transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {explainLoading && (
+                  <span
+                    className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-cyan-300 border-t-cyan-600"
+                    aria-hidden="true"
+                  />
+                )}
+                {explainLoading ? 'Explaining...' : 'Explain with LIME'}
+              </button>
+              <button
+                type="button"
+                onClick={handleExplainShap}
+                disabled={shapLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-violet-600 bg-white px-5 py-3 font-medium text-violet-700 shadow-sm transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {shapLoading && (
+                  <span
+                    className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-violet-300 border-t-violet-600"
+                    aria-hidden="true"
+                  />
+                )}
+                {shapLoading ? 'Explaining...' : 'Explain with SHAP'}
+              </button>
+            </div>
             <p className="text-xs text-gray-500">Backend: {API_BASE}</p>
           </div>{' '}
           {result && <ResultsDisplay result={result} text={text} />}
           {explanation && <LimeExplanation explanation={explanation} text={text} />}
+          {shapExplanation && <ShapExplanation explanation={shapExplanation} text={text} />}
         </main>
       </div>
     </div>
