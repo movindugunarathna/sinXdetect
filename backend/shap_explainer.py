@@ -14,23 +14,14 @@ import logging
 from typing import Callable, List, Optional
 
 import numpy as np
-import shap
 from pydantic import BaseModel
 
-try:
-    from lime_explainer import (
-        ExplanationResponse,
-        group_into_phrases,
-        group_into_sentences,
-        build_evidence_summary,
-    )
-except ImportError:
-    from backend.lime_explainer import (
-        ExplanationResponse,
-        group_into_phrases,
-        group_into_sentences,
-        build_evidence_summary,
-    )
+from lime_explainer import (
+    ExplanationResponse,
+    group_into_phrases,
+    group_into_sentences,
+    build_evidence_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +112,14 @@ class ShapExplainer:
         evaluates all features, unlike LIME which samples a subset).
         """
         try:
+            try:
+                import shap
+            except ModuleNotFoundError as e:
+                raise RuntimeError(
+                    "The 'shap' package is required for SHAP explanations. "
+                    "Install with: pip install shap"
+                ) from e
+
             n_tokens = len(tokens)
             effective_samples = max(num_samples, _MIN_KERNEL_SAMPLES)
 
