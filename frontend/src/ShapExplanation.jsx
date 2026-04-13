@@ -55,7 +55,7 @@ function ShapExplanation({ explanation, text }) {
         )}
       </div>
 
-      {/* Evidence Summary Bar */}
+      {/* Evidence Summary Bar
       {summary && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs font-medium text-gray-600">
@@ -89,9 +89,9 @@ function ShapExplanation({ explanation, text }) {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
-      {/* SHAP Base Values */}
+      {/* SHAP Base Values
       {baseValues && baseValues.length === 2 && (
         <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-3">
           <p className="text-xs font-medium text-violet-700 mb-1">
@@ -106,9 +106,9 @@ function ShapExplanation({ explanation, text }) {
             </span>
           </div>
         </div>
-      )}
+      )} */}
 
-      {/* Top Contributing Tokens (SHAP-specific) */}
+      {/* Top Contributing Tokens (SHAP-specific)
       {topTokens.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-700">
@@ -147,7 +147,7 @@ function ShapExplanation({ explanation, text }) {
             Positive values push toward AI-generated, negative toward Human-written.
           </p>
         </div>
-      )}
+      )} */}
 
       {/* Highlighted Full Text */}
       {sentences.length > 0 && (
