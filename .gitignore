@@ -1,9 +1,15 @@
 # Dataset files
 ml/dataset/
 
+# Secrets (Kaggle API token, local paths)
+ml/.env
+
 # Feedback database (contains user-submitted text)
 data/feedback.db
 backend/.venv
 backend/__pycache__
 __pycache__
 backend/.venv/Lib
+
+ml/__pycache__/
+ml/dataset/
