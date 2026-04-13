@@ -34,7 +34,7 @@ function LimeExplanation({ explanation, text }) {
         )}
       </div>
 
-      {/* Evidence Summary Bar */}
+      {/* Evidence Summary Bar
       {summary && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs font-medium text-gray-600">
@@ -68,7 +68,7 @@ function LimeExplanation({ explanation, text }) {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Highlighted Full Text — sentence-level highlighting like GPTZero */}
       {sentences.length > 0 && (
