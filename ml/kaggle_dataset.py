@@ -1,4 +1,4 @@
-"""/// AI generated code ///
+"""
 Download and load the Sinhala AI/Human JSONL dataset from Kaggle.
 
 Dataset: https://www.kaggle.com/datasets/movindug/sinhala-ai-generated-and-human-written-texts
@@ -7,10 +7,13 @@ Authentication (pick one):
   - ``KAGGLE_API_TOKEN`` in ``ml/.env`` (Kaggle → Settings → API → token), or
   - ``KAGGLE_USERNAME`` + ``KAGGLE_KEY`` (legacy), or
   - ``~/.kaggle/kaggle.json`` / ``~/.kaggle/access_token`` as per Kaggle docs.
+
+This file may live under ``ml/data_analysis/``; paths still resolve to the ``ml/`` root.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -25,8 +28,11 @@ DEFAULT_KAGGLE_DATASET = "movindug/sinhala-ai-generated-and-human-written-texts"
 
 
 def ml_root() -> Path:
-    """Directory containing this file (the ``ml/`` folder)."""
-    return Path(__file__).resolve().parent
+    """The ``ml/`` project directory (not ``ml/data_analysis/`` when this file is nested)."""
+    p = Path(__file__).resolve().parent
+    if p.name == "data_analysis":
+        return p.parent
+    return p
 
 
 def _ensure_python_dotenv() -> None:
@@ -60,9 +66,52 @@ def load_ml_dotenv() -> None:
     load_dotenv(env)
 
 
+def _sync_kaggle_credentials_to_disk() -> None:
+    """Write credentials under ``~/.kaggle/`` before any ``import kaggle`` (its ``__init__`` authenticates)."""
+    kdir = Path.home() / ".kaggle"
+    kdir.mkdir(exist_ok=True)
+
+    token = os.environ.get("KAGGLE_API_TOKEN")
+    if token:
+        at = kdir / "access_token"
+        at.write_text(token.strip(), encoding="utf-8")
+        try:
+            at.chmod(0o600)
+        except OSError:
+            pass
+
+    user = os.environ.get("KAGGLE_USERNAME")
+    key = os.environ.get("KAGGLE_KEY")
+    if user and key:
+        kj = kdir / "kaggle.json"
+        kj.write_text(
+            json.dumps({"username": user, "key": key}),
+            encoding="utf-8",
+        )
+        try:
+            kj.chmod(0o600)
+        except OSError:
+            pass
+
+
 def kaggle_cache_dir() -> Path:
     """Where downloaded JSONL files are stored (under ``ml/dataset/``, gitignored)."""
     return ml_root() / "dataset" / "kaggle"
+
+
+def resolve_all_data_jsonl() -> Optional[Path]:
+    """
+    Find ``all_data.jsonl`` under :func:`kaggle_cache_dir` (any depth).
+
+    Kaggle zips often unpack as ``.../dataset/all_data.jsonl``, not at the cache root.
+    """
+    cache = kaggle_cache_dir()
+    if not cache.is_dir():
+        return None
+    for p in sorted(cache.rglob("all_data.jsonl")):
+        if p.is_file():
+            return p
+    return None
 
 
 def _get_kaggle_api_class() -> Type:
@@ -122,13 +171,6 @@ def ensure_kaggle_dataset(
     """
     _ensure_python_dotenv()
     load_ml_dotenv()
-    dest = Path(dest) if dest else kaggle_cache_dir()
-    dest.mkdir(parents=True, exist_ok=True)
-
-    if list(dest.rglob("*.jsonl")) and not force:
-        return dest
-
-    KaggleApi = _get_kaggle_api_class()
 
     if not (
         os.environ.get("KAGGLE_API_TOKEN")
@@ -136,8 +178,18 @@ def ensure_kaggle_dataset(
     ):
         raise RuntimeError(
             "Set KAGGLE_API_TOKEN (recommended) or KAGGLE_USERNAME + KAGGLE_KEY. "
-            "You can store KAGGLE_API_TOKEN in ml/.env — see ml/.env.example."
+            "You can store KAGGLE_API_TOKEN in ml/.env (next to the ml/ folder) — see ml/.env.example."
         )
+
+    _sync_kaggle_credentials_to_disk()
+
+    dest = Path(dest) if dest else kaggle_cache_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+
+    if list(dest.rglob("*.jsonl")) and not force:
+        return dest
+
+    KaggleApi = _get_kaggle_api_class()
 
     api = KaggleApi()
     api.authenticate()
