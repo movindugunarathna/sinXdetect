@@ -1,18 +1,30 @@
-function LimeExplanation({ explanation, text }) {
+function ShapExplanation({ explanation, text }) {
   const summary = explanation.evidence_summary;
   const sentences = explanation.sentence_explanations || [];
-  // For the analysis list, filter out neutrals and sort by strength
   const significantSentences = sentences
     .filter((s) => s.color !== 'neutral')
     .sort((a, b) => Math.abs(b.net_weight) - Math.abs(a.net_weight));
   const hasContent = sentences.length > 0;
+
+  // SHAP-specific data
+  const shapData = explanation.explanation_data || {};
+  const baseValues = shapData.base_values;
+  const shapTokens = shapData.tokens || [];
+  const aiShapValues = shapData.shap_values?.['AI-generated'] || [];
+
+  // Top contributing tokens by absolute Shapley value
+  const topTokens = aiShapValues
+    .map((val, idx) => ({ token: shapTokens[idx], value: val, idx }))
+    .filter((t) => t.token && Math.abs(t.value) > 0.001)
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+    .slice(0, 10);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 space-y-5 shadow-sm">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
         <svg
-          className="w-5 h-5 text-cyan-600"
+          className="w-5 h-5 text-violet-600"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -21,12 +33,21 @@ function LimeExplanation({ explanation, text }) {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+            d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"
+          />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"
           />
         </svg>
         <h2 className="text-lg font-semibold text-gray-800">
-          LIME Explanation
+          SHAP Explanation
         </h2>
+        <span className="text-xs text-violet-600 bg-violet-50 px-2 py-0.5 rounded-md border border-violet-200 font-medium">
+          Shapley Values
+        </span>
         {explanation.error && (
           <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
             {explanation.error}
@@ -70,7 +91,65 @@ function LimeExplanation({ explanation, text }) {
         </div>
       )} */}
 
-      {/* Highlighted Full Text — sentence-level highlighting like GPTZero */}
+      {/* SHAP Base Values
+      {baseValues && baseValues.length === 2 && (
+        <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-3">
+          <p className="text-xs font-medium text-violet-700 mb-1">
+            SHAP Baseline (expected output with no tokens)
+          </p>
+          <div className="flex gap-6 text-sm">
+            <span className="text-emerald-700">
+              Human: <span className="font-semibold">{(baseValues[0] * 100).toFixed(1)}%</span>
+            </span>
+            <span className="text-red-700">
+              AI: <span className="font-semibold">{(baseValues[1] * 100).toFixed(1)}%</span>
+            </span>
+          </div>
+        </div>
+      )} */}
+
+      {/* Top Contributing Tokens (SHAP-specific)
+      {topTokens.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-gray-700">
+            Top Token Shapley Values
+          </h3>
+          <div className="space-y-1.5">
+            {topTokens.map((t, idx) => {
+              const isAI = t.value > 0;
+              const maxAbsVal = Math.abs(topTokens[0].value) || 0.01;
+              const barWidth = (Math.abs(t.value) / maxAbsVal) * 100;
+              return (
+                <div key={idx} className="flex items-center gap-3 text-sm">
+                  <span className="w-36 truncate text-right font-medium text-gray-700" title={t.token}>
+                    {t.token}
+                  </span>
+                  <div className="flex-1 flex items-center h-5">
+                    <div
+                      className={`h-4 rounded-sm transition-all duration-500 ${
+                        isAI ? 'bg-red-400' : 'bg-emerald-400'
+                      }`}
+                      style={{ width: `${barWidth.toFixed(1)}%`, minWidth: '4px' }}
+                    />
+                  </div>
+                  <span
+                    className={`w-20 text-right text-xs font-medium tabular-nums ${
+                      isAI ? 'text-red-600' : 'text-emerald-600'
+                    }`}
+                  >
+                    {t.value > 0 ? '+' : ''}{t.value.toFixed(4)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-gray-400 pt-1">
+            Positive values push toward AI-generated, negative toward Human-written.
+          </p>
+        </div>
+      )} */}
+
+      {/* Highlighted Full Text */}
       {sentences.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-700">
@@ -101,7 +180,7 @@ function LimeExplanation({ explanation, text }) {
         </div>
       )}
 
-      {/* Sentence-Level Breakdown (only significant sentences) */}
+      {/* Sentence-Level Breakdown */}
       {significantSentences.length > 0 && (
         <div className="space-y-3 border-t border-gray-200 pt-4">
           <h3 className="text-sm font-medium text-gray-700">
@@ -160,19 +239,16 @@ function LimeExplanation({ explanation, text }) {
 }
 
 /**
- * Render the full text with sentence-level background highlighting (GPTZero style).
- * Each sentence is a continuous highlighted span. Gaps between sentences stay neutral.
- * Highlight intensity scales with signal strength.
+ * Render the full text with sentence-level background highlighting.
+ * Replicates the same approach used in LimeExplanation for visual consistency.
  */
 function renderSentenceHighlightedText(originalText, sentenceHighlights) {
   if (!sentenceHighlights || sentenceHighlights.length === 0) {
     return <span className="text-gray-800">{originalText}</span>;
   }
 
-  // Sort sentences by their position in the text
   const sorted = [...sentenceHighlights].sort((a, b) => a.start - b.start);
 
-  // Remove overlaps (keep first occurrence)
   const cleaned = [];
   for (const s of sorted) {
     if (cleaned.length === 0 || s.start >= cleaned[cleaned.length - 1].end) {
@@ -180,14 +256,12 @@ function renderSentenceHighlightedText(originalText, sentenceHighlights) {
     }
   }
 
-  // Compute max absolute weight for intensity scaling
   const maxWeight = Math.max(...cleaned.map((s) => Math.abs(s.net_weight)), 0.01);
 
   const elements = [];
   let lastIndex = 0;
 
   cleaned.forEach((sent, idx) => {
-    // Unhighlighted gap before this sentence
     if (sent.start > lastIndex) {
       elements.push(
         <span key={`gap-${idx}`} className="text-gray-800">
@@ -198,7 +272,6 @@ function renderSentenceHighlightedText(originalText, sentenceHighlights) {
 
     const sentText = originalText.substring(sent.start, sent.end);
 
-    // Neutral sentences render as plain text
     if (sent.color === 'neutral') {
       elements.push(
         <span key={`sent-${idx}`} className="text-gray-800">
@@ -209,14 +282,13 @@ function renderSentenceHighlightedText(originalText, sentenceHighlights) {
       return;
     }
 
-    // Intensity: stronger signal = more opaque highlight (min 20%, max 55%)
     const ratio = Math.abs(sent.net_weight) / maxWeight;
     const opacity = 0.15 + ratio * 0.4;
 
     const bgColor =
       sent.color === 'red'
-        ? `rgba(239, 68, 68, ${opacity.toFixed(2)})`   // red-500
-        : `rgba(16, 185, 129, ${opacity.toFixed(2)})`;  // emerald-500
+        ? `rgba(239, 68, 68, ${opacity.toFixed(2)})`
+        : `rgba(16, 185, 129, ${opacity.toFixed(2)})`;
 
     const borderColor =
       sent.color === 'red'
@@ -242,7 +314,6 @@ function renderSentenceHighlightedText(originalText, sentenceHighlights) {
     lastIndex = sent.end;
   });
 
-  // Trailing unhighlighted text
   if (lastIndex < originalText.length) {
     elements.push(
       <span key="text-end" className="text-gray-800">
@@ -254,4 +325,4 @@ function renderSentenceHighlightedText(originalText, sentenceHighlights) {
   return elements;
 }
 
-export default LimeExplanation;
+export default ShapExplanation;
