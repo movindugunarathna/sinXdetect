@@ -23,4 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
+# Local env files (templates like .env.example stay tracked)
 .env
+.env.*
+!.env.example

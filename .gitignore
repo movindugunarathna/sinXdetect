@@ -1,8 +1,11 @@
 # Dataset files
 ml/dataset/
 
-# Secrets (Kaggle API token, local paths)
-ml/.env
+# Environment / secrets — never commit (any path in the repo)
+.env
+.env.*
+!.env.example
+!**/.env.example
 
 # Feedback database (contains user-submitted text)
 data/feedback.db

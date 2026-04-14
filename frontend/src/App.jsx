@@ -177,8 +177,7 @@ function App() {
             Text Classifier
           </h1>
           <p className="text-gray-600 text-sm sm:text-base">
-            Enter Sinhala text and get AI-powered classification with LIME and
-            SHAP explanations.
+            Enter Sinhala text and get AI-powered classification with SHAP explanations.
           </p>
         </header>
 
@@ -266,7 +265,7 @@ function App() {
                 )}
                 {loading ? 'Classifying...' : 'Classify'}
               </button>
-              <button
+              {/* <button
                 type="button"
                 onClick={handleExplain}
                 disabled={explainLoading}
@@ -279,7 +278,7 @@ function App() {
                   />
                 )}
                 {explainLoading ? 'Explaining...' : 'Explain with LIME'}
-              </button>
+              </button> */}
               <button
                 type="button"
                 onClick={handleExplainShap}
@@ -298,7 +297,7 @@ function App() {
             <p className="text-xs text-gray-500">Backend: {API_BASE}</p>
           </div>{' '}
           {result && <ResultsDisplay result={result} text={text} />}
-          {explanation && <LimeExplanation explanation={explanation} text={text} />}
+          {/* {explanation && <LimeExplanation explanation={explanation} text={text} />} */}
           {shapExplanation && <ShapExplanation explanation={shapExplanation} text={text} />}
         </main>
       </div>
