@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import './App.css';
-import ModelPerformance from './ModelPerformance';
+// import ModelPerformance from './ModelPerformance';
 import ResultsDisplay from './ResultsDisplay';
 import LimeExplanation from './LimeExplanation';
 import ShapExplanation from './ShapExplanation';
@@ -181,7 +181,7 @@ function App() {
           </p>
         </header>
 
-        <ModelPerformance />
+        {/* <ModelPerformance /> */}
 
         <main className="glass-card rounded-2xl p-6 sm:p-8 space-y-5">
           <div className="flex flex-col gap-3">
